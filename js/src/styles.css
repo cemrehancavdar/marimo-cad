@@ -1,0 +1,18 @@
+/* Marimo CAD Widget Styles */
+
+.marimo-cad-container {
+  width: 100%;
+  min-height: 600px;
+  position: relative;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #fafafa;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .marimo-cad-container {
+    min-height: 400px;
+  }
+}

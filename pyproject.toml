@@ -1,0 +1,36 @@
+[project]
+name = "marimo-cad"
+version = "0.1.0"
+description = "Parametric CAD (build123d) for marimo"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Your Name", email = "you@example.com" }]
+dependencies = [
+    "build123d>=0.10.0",
+    "ocp-tessellate>=3.0.0",
+    "anywidget>=0.9.0",
+    "marimo>=0.9.0",
+    "bd_warehouse>=0.1.0",
+]
+
+[project.optional-dependencies]
+dev = ["ruff", "pytest"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/marimo_cad"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP"]
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"notebooks/*.py" = ["N803"]  # marimo cell functions use class names as args
