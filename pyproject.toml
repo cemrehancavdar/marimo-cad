@@ -54,4 +54,4 @@ select = ["E", "F", "I", "N", "W", "UP"]
 ignore = ["E501"]
 
 [tool.ruff.lint.per-file-ignores]
-"notebooks/*.py" = ["N803"]
+"notebooks/*.py" = ["N803", "N806"]  # marimo cells use class names as args, constants in cells

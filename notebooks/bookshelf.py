@@ -20,88 +20,90 @@ def _():
 def _(mo):
     mo.md("""
     # Parametric Bookshelf
+
+    Adjust sliders - camera position is preserved!
     """)
     return
 
 
 @app.cell
-def _(Box, Pos, cad, mo):
+def _(mo):
+    shelf_slider = mo.ui.slider(2, 8, value=4, label="Shelves")
+    height_slider = mo.ui.slider(60, 200, value=120, label="Height (cm)")
+    return height_slider, shelf_slider
+
+
+@app.cell
+def _(cad):
+    viewer = cad.Viewer()
+    return (viewer,)
+
+
+@app.cell
+def _(Box, Pos, height_slider, mo, shelf_slider, viewer):
     # Fixed dimensions (cm)
-    width = 80
-    depth = 30
-    side_t = 2  # side panel thickness
-    shelf_t = 2  # shelf thickness
-    back_t = 1  # back panel thickness
+    WIDTH = 80
+    DEPTH = 30
+    SIDE_T = 2
+    SHELF_T = 2
+    BACK_T = 1
 
     # Colors
-    side_color = "#8B4513"  # saddle brown
-    shelf_color = "#DEB887"  # burlywood
-    back_color = "#A0522D"  # sienna
-
-    # Create viewer
-    viewer = mo.ui.anywidget(cad.view())
+    SIDE_COLOR = "#8B4513"
+    SHELF_COLOR = "#DEB887"
+    BACK_COLOR = "#A0522D"
 
     def build_bookshelf(shelf_count: int, height: int) -> list:
         """Build bookshelf parts from parameters."""
         parts = []
-
-        # Internal dimensions
-        inner_width = width - 2 * side_t
-        height - 2 * shelf_t
+        inner_width = WIDTH - 2 * SIDE_T
 
         # Left side
-        left = Pos(-width / 2 + side_t / 2, 0, height / 2) * Box(side_t, depth, height)
-        parts.append({"shape": left, "name": "Left Side", "color": side_color})
+        left = Pos(-WIDTH / 2 + SIDE_T / 2, 0, height / 2) * Box(SIDE_T, DEPTH, height)
+        parts.append({"shape": left, "name": "Left Side", "color": SIDE_COLOR})
 
         # Right side
-        right = Pos(width / 2 - side_t / 2, 0, height / 2) * Box(side_t, depth, height)
-        parts.append({"shape": right, "name": "Right Side", "color": side_color})
+        right = Pos(WIDTH / 2 - SIDE_T / 2, 0, height / 2) * Box(SIDE_T, DEPTH, height)
+        parts.append({"shape": right, "name": "Right Side", "color": SIDE_COLOR})
 
         # Back panel
-        back = Pos(0, -depth / 2 + back_t / 2, height / 2) * Box(inner_width, back_t, height)
-        parts.append({"shape": back, "name": "Back", "color": back_color})
+        back = Pos(0, -DEPTH / 2 + BACK_T / 2, height / 2) * Box(inner_width, BACK_T, height)
+        parts.append({"shape": back, "name": "Back", "color": BACK_COLOR})
 
-        # Top panel (lid)
-        top = Pos(0, 0, height - shelf_t / 2) * Box(inner_width, depth, shelf_t)
-        parts.append({"shape": top, "name": "Top", "color": side_color})
+        # Top panel
+        top = Pos(0, 0, height - SHELF_T / 2) * Box(inner_width, DEPTH, SHELF_T)
+        parts.append({"shape": top, "name": "Top", "color": SIDE_COLOR})
 
         # Bottom shelf
-        bottom = Pos(0, 0, shelf_t / 2) * Box(inner_width, depth, shelf_t)
-        parts.append({"shape": bottom, "name": "Bottom", "color": shelf_color})
+        bottom = Pos(0, 0, SHELF_T / 2) * Box(inner_width, DEPTH, SHELF_T)
+        parts.append({"shape": bottom, "name": "Bottom", "color": SHELF_COLOR})
 
-        # Internal shelves (evenly spaced between bottom and top)
+        # Internal shelves
         if shelf_count > 2:
-            # Spacing between shelf centers
-            # Bottom center at shelf_t/2, Top center at height - shelf_t/2
-            # Total span: height - shelf_t, divided into (shelf_count - 1) gaps
-            spacing = (height - shelf_t) / (shelf_count - 1)
+            spacing = (height - SHELF_T) / (shelf_count - 1)
             for i in range(1, shelf_count - 1):
-                z = shelf_t / 2 + i * spacing
-                shelf = Pos(0, 0, z) * Box(inner_width, depth, shelf_t)
-                parts.append({"shape": shelf, "name": f"Shelf {i}", "color": shelf_color})
+                z = SHELF_T / 2 + i * spacing
+                shelf = Pos(0, 0, z) * Box(inner_width, DEPTH, SHELF_T)
+                parts.append({"shape": shelf, "name": f"Shelf {i}", "color": SHELF_COLOR})
 
         return parts
 
-    def update_viewer(_):
-        """Update viewer when sliders change."""
-        parts = build_bookshelf(shelf_slider.value, height_slider.value)
-        viewer.widget.render(parts)
+    parts = build_bookshelf(shelf_slider.value, height_slider.value)
+    viewer.render(parts)
 
-    # Sliders
-    shelf_slider = mo.ui.slider(2, 8, value=4, label="Shelves", on_change=update_viewer)
-    height_slider = mo.ui.slider(60, 200, value=120, label="Height (cm)", on_change=update_viewer)
-    return build_bookshelf, height_slider, shelf_slider, viewer
-
-
-@app.cell
-def _(build_bookshelf, height_slider, mo, shelf_slider, viewer):
-    # Initial render
-    _parts = build_bookshelf(shelf_slider.value, height_slider.value)
-    viewer.widget.render(_parts)
-
-    # Display
     mo.vstack([mo.hstack([shelf_slider, height_slider]), viewer])
-    return
+    return (
+        BACK_COLOR,
+        BACK_T,
+        DEPTH,
+        SHELF_COLOR,
+        SHELF_T,
+        SIDE_COLOR,
+        SIDE_T,
+        WIDTH,
+        build_bookshelf,
+        parts,
+    )
 
 
 if __name__ == "__main__":

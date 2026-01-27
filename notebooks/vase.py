@@ -49,7 +49,7 @@ def _(mo):
     # Parametric Vase
 
     A smooth, organic vase created with spline curves and revolution.
-    Perfect for 3D printing in vase mode (spiral contour).
+    Adjust the sliders - camera position is preserved!
     """)
     return
 
@@ -82,8 +82,9 @@ def _(mo):
 
 
 @app.cell
-def _(cad, mo):
-    viewer = mo.ui.anywidget(cad.view())
+def _(cad):
+    # Create viewer once - it persists across slider changes
+    viewer = cad.Viewer()
     return (viewer,)
 
 
@@ -118,62 +119,42 @@ def _(
         thickness: float,
     ):
         """Build a smooth vase using spline revolution."""
-        # Calculate heights
         h_belly = h * (belly_pct / 100)
         h_neck = h * (neck_pct / 100)
 
-        # Inner radii
         inner_r_base = max(r_base - thickness, 2)
         inner_r_belly = max(r_belly - thickness, 2)
         inner_r_neck = max(r_neck - thickness, 2)
         inner_r_top = r_top - thickness
 
-        # Create the outer profile using smooth splines
         with BuildLine(Plane.XZ) as outer_profile:
-            # Bottom line (flat base)
             Line((0, 0), (r_base, 0))
-            # Smooth spline up the side
             Spline(
                 (r_base, 0),
                 (r_belly, h_belly),
                 (r_neck, h_neck),
                 (r_top, h),
             )
-            # Top edge (horizontal)
             Line((r_top, h), (inner_r_top, h))
-            # Inner spline (offset from outer)
             Spline(
                 (inner_r_top, h),
                 (inner_r_neck, h_neck),
                 (inner_r_belly, h_belly),
                 (inner_r_base, thickness),
             )
-            # Inner bottom
             Line((inner_r_base, thickness), (0, thickness))
-            # Close the profile
             Line((0, thickness), (0, 0))
 
-        # Create face from profile
         with BuildSketch(Plane.XZ) as profile_sketch:
             make_face(outer_profile.wires()[0])
 
-        # Revolve around Z axis
         with BuildPart() as vase_part:
             revolve(profile_sketch.sketch, axis=Axis.Z, revolution_arc=360)
 
         vase = vase_part.part
-
-        parts = [
-            {
-                "shape": vase,
-                "name": "Vase",
-                "color": "#E8D5B7",  # Warm ceramic color
-            }
-        ]
-
+        parts = [{"shape": vase, "name": "Vase", "color": "#E8D5B7"}]
         return vase, parts
 
-    # Build with current parameters
     vase_shape, vase_parts = build_vase(
         h=height.value,
         r_base=base_radius.value,
@@ -205,9 +186,9 @@ def _(
     viewer,
     wall,
 ):
-    viewer.widget.render(vase_parts)
+    # Update viewer - camera stays put!
+    viewer.render(vase_parts)
 
-    # Create STL download
     def _get_stl_bytes():
         with tempfile.TemporaryDirectory() as tmpdir:
             stl_path = Path(tmpdir) / "vase.stl"
@@ -225,35 +206,10 @@ def _(
         [
             mo.hstack(
                 [
-                    mo.vstack(
-                        [
-                            mo.md("**Dimensions**"),
-                            height,
-                            base_radius,
-                            wall,
-                        ]
-                    ),
-                    mo.vstack(
-                        [
-                            mo.md("**Shape**"),
-                            belly_radius,
-                            neck_radius,
-                            top_radius,
-                        ]
-                    ),
-                    mo.vstack(
-                        [
-                            mo.md("**Profile**"),
-                            belly_height,
-                            neck_height,
-                        ]
-                    ),
-                    mo.vstack(
-                        [
-                            mo.md("**Export**"),
-                            download_btn,
-                        ]
-                    ),
+                    mo.vstack([mo.md("**Dimensions**"), height, base_radius, wall]),
+                    mo.vstack([mo.md("**Shape**"), belly_radius, neck_radius, top_radius]),
+                    mo.vstack([mo.md("**Profile**"), belly_height, neck_height]),
+                    mo.vstack([mo.md("**Export**"), download_btn]),
                 ],
                 justify="start",
                 gap=2,

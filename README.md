@@ -6,7 +6,7 @@ Build interactive 3D CAD models with sliders that update in real-time without lo
 
 ## Why marimo-cad?
 
-marimo already displays build123d objects natively via `_repr_html_`. So when should you use this widget?
+marimo already displays build123d objects via `_repr_html_`. So when should you use this?
 
 | Use Case | Native build123d | marimo-cad |
 |----------|------------------|------------|
@@ -20,10 +20,7 @@ marimo already displays build123d objects natively via `_repr_html_`. So when sh
 ## Installation
 
 ```bash
-git clone https://github.com/cemrehancavdar/marimo-cad
-cd marimo-cad
-uv sync
-cd js && npm install && npm run build
+pip install marimo-cad
 ```
 
 ## Quick Start
@@ -34,29 +31,17 @@ from build123d import Box, Cylinder
 import marimo_cad as cad
 
 # Create sliders
-width = mo.ui.slider(10, 50, value=20, label="Width")
-height = mo.ui.slider(10, 50, value=30, label="Height")
+size = mo.ui.slider(10, 50, value=20, label="Size")
 
 # Create viewer once
-viewer = cad.view()
+viewer = cad.Viewer()
 
-# Build shape reactively
-box = Box(width.value, width.value, height.value)
-hole = Cylinder(5, height.value + 10)
-model = box - hole
+# Build and render - camera stays put when slider changes!
+box = Box(size.value, size.value, size.value)
+viewer.render(box)
 
-# Render - camera stays put when sliders change!
-viewer.render(model)
-
-mo.vstack([mo.hstack([width, height]), viewer])
+mo.vstack([size, viewer])
 ```
-
-## Features
-
-- **Camera preservation** - adjust sliders without losing your view angle
-- **Named assemblies** - multiple parts with tree view selection
-- **Export** - STL, STEP, GLTF with one function call
-- **Reactive updates** - only changed geometry is updated
 
 ## API
 
@@ -65,19 +50,19 @@ mo.vstack([mo.hstack([width, height]), viewer])
 ```python
 import marimo_cad as cad
 
-v = cad.view()                    # Default: 100% width, 600px height
-v = cad.view(width=800)           # Fixed width
-v = cad.view({"width": "50%"})    # CSS width
+viewer = cad.Viewer()                    # Default: 100% width, 600px height
+viewer = cad.Viewer(width=800)           # Fixed width  
+viewer = cad.Viewer(width="50%")         # CSS width
 ```
 
 ### Render Shapes
 
 ```python
 # Single shape
-v.render(box)
+viewer.render(box)
 
 # Named assembly
-v.render([
+viewer.render([
     {"shape": base, "name": "Base", "color": "blue"},
     {"shape": top, "name": "Top", "color": "red"},
 ])
@@ -99,9 +84,11 @@ export_gltf(model, "part.glb")    # Web viewers
 
 ## Examples
 
-See `notebooks/` for interactive examples:
-
 ```bash
+# Clone and run examples
+git clone https://github.com/cemrehancavdar/marimo-cad
+cd marimo-cad && uv sync && cd js && npm install && npm run build && cd ..
+
 uv run marimo edit notebooks/vase.py      # Parametric vase with STL download
 uv run marimo edit notebooks/bookshelf.py # Parametric bookshelf
 ```

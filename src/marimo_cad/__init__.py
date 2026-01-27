@@ -1,15 +1,15 @@
-"""marimo-cad - Parametric CAD (build123d) for marimo."""
+"""marimo-cad - Reactive Parametric CAD for marimo."""
 
 from typing import TYPE_CHECKING
 
 from marimo_cad.export import export_gltf, export_step, export_stl
-from marimo_cad.widget import COLORS, view
+from marimo_cad.widget import COLORS, Viewer
 
 if TYPE_CHECKING:
     from marimo_cad.widget import PartSpec
 
 __all__ = [
-    "view",
+    "Viewer",
     "COLORS",
     "PartSpec",
     "export_step",
