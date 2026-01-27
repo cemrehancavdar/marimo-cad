@@ -1,26 +1,30 @@
 /**
  * PartManager - Clean abstraction over three-cad-viewer's internal part management
  * 
- * three-cad-viewer quirks this abstracts:
- * - ObjectGroup extends THREE.Group (position/quaternion on group itself, not group.group)
- * - Groups stored with path keys like "/shapes/assembly/PartName"
- * - No built-in API for adding/removing individual parts after render
+ * Uses real ObjectGroup instances via createCADGroup() for full compatibility with:
+ * - Clipping (instanceof ObjectGroup check)
+ * - NestedGroup methods (_traverse, selection, etc.)
+ * - All material controls
+ * 
+ * ClippingExtension adds clipping stencils to dynamically added parts.
  */
 
 import * as THREE from "three";
-import { LineSegmentsGeometry } from "three/examples/jsm/lines/LineSegmentsGeometry.js";
-import { LineMaterial } from "three/examples/jsm/lines/LineMaterial.js";
-import { LineSegments2 } from "three/examples/jsm/lines/LineSegments2.js";
+import { createCADGroup, updateOptionsFromDisplay } from "./cad-group-factory.js";
+import { ClippingExtension } from "./clipping-extension.js";
 
 /**
  * PartHandle - Clean interface to manipulate a single part in the scene.
+ * Wraps an ObjectGroup and provides convenient methods.
  */
 export class PartHandle {
-  constructor(id, threeGroup, geometry, options = {}) {
+  /**
+   * @param {string} id - Part ID (path like "/Group/PartName")
+   * @param {ObjectGroup} group - ObjectGroup instance
+   */
+  constructor(id, group) {
     this.id = id;
-    this._group = threeGroup;      // THREE.Group or ObjectGroup (both extend THREE.Group)
-    this._geometry = geometry;      // BufferGeometry for the mesh
-    this._edges = options.edges;    // LineSegments2 for edges (optional)
+    this._group = group;
     this._disposed = false;
   }
 
@@ -29,14 +33,14 @@ export class PartHandle {
     return !this._disposed && this._group && this._group.parent;
   }
 
-  /** Get the THREE.Group for this part */
+  /** Get the ObjectGroup for this part */
   get group() {
     return this._group;
   }
 
   /** Get the geometry */
   get geometry() {
-    return this._geometry;
+    return this._group?.shapeGeometry;
   }
 
   /** Set part position */
@@ -61,57 +65,49 @@ export class PartHandle {
 
   /** Update geometry buffers */
   updateGeometry(vertices, normals, triangles) {
-    if (!this.isValid || !this._geometry) return;
+    if (!this.isValid) return;
+    
+    const geometry = this._group.shapeGeometry;
+    if (!geometry) return;
 
     const positions = vertices instanceof Float32Array ? vertices : new Float32Array(vertices);
     const normalsArr = normals instanceof Float32Array ? normals : new Float32Array(normals);
     const indices = triangles instanceof Uint32Array ? triangles : new Uint32Array(triangles);
 
-    this._updateBufferAttribute(this._geometry, 'position', positions, 3);
-    this._updateBufferAttribute(this._geometry, 'normal', normalsArr, 3);
-    this._updateIndex(this._geometry, indices);
+    this._updateBufferAttribute(geometry, 'position', positions, 3);
+    this._updateBufferAttribute(geometry, 'normal', normalsArr, 3);
+    this._updateIndex(geometry, indices);
 
-    this._geometry.computeBoundingBox();
-    this._geometry.computeBoundingSphere();
+    geometry.computeBoundingBox();
+    geometry.computeBoundingSphere();
   }
 
   /** Update edge geometry */
   updateEdges(edgeData) {
-    if (!this.isValid || !this._edges) return;
+    if (!this.isValid) return;
     
-    const edgeGeom = this._edges.geometry;
-    if (edgeGeom && edgeGeom.setPositions) {
-      const positions = edgeData instanceof Float32Array ? edgeData : new Float32Array(edgeData);
-      edgeGeom.setPositions(positions);
-    }
+    const edges = this._group.types?.edges;
+    if (!edges?.geometry?.setPositions) return;
+    
+    const positions = edgeData instanceof Float32Array ? edgeData : new Float32Array(edgeData);
+    edges.geometry.setPositions(positions);
   }
 
   /** Dispose of this part's resources */
   dispose() {
     if (this._disposed) return;
 
-    if (this._group && this._group.parent) {
-      this._group.parent.remove(this._group);
-    }
-
-    if (this._geometry) {
-      this._geometry.dispose();
-    }
-
-    // Dispose materials on child meshes
+    // Use ObjectGroup's dispose method which handles cleanup properly
     if (this._group) {
-      this._group.traverse((child) => {
-        if (child.material) {
-          if (Array.isArray(child.material)) {
-            child.material.forEach(m => m.dispose());
-          } else {
-            child.material.dispose();
-          }
-        }
-        if (child.geometry && child.geometry !== this._geometry) {
-          child.geometry.dispose();
-        }
-      });
+      // Remove from parent first
+      if (this._group.parent) {
+        this._group.parent.remove(this._group);
+      }
+      
+      // ObjectGroup.dispose() handles geometry and material cleanup
+      if (typeof this._group.dispose === 'function') {
+        this._group.dispose();
+      }
     }
 
     this._disposed = true;
@@ -145,18 +141,35 @@ export class PartHandle {
  * PartManager - Manages all parts in the scene.
  * 
  * Provides a clean API for adding, removing, and updating parts
- * without worrying about three-cad-viewer's internal structure.
+ * using real ObjectGroup instances for full three-cad-viewer compatibility.
  */
 export class PartManager {
+  /**
+   * @param {Object} viewer - LiveViewer instance
+   */
   constructor(viewer) {
     this._viewer = viewer;
     this._parts = new Map();  // id -> PartHandle
     this._renderOptions = null;
+    this._clippingExt = new ClippingExtension(viewer);
+  }
+
+  /** Get the ClippingExtension */
+  get clipping() {
+    return this._clippingExt;
   }
 
   /** Set render options for new parts */
   setRenderOptions(opts) {
     this._renderOptions = opts;
+  }
+
+  /** Get render options with display dimensions */
+  _getOptions() {
+    return updateOptionsFromDisplay(
+      this._renderOptions || {},
+      this._viewer?.display
+    );
   }
 
   /** Get a part by ID */
@@ -190,144 +203,39 @@ export class PartManager {
     if (!groups) return;
 
     for (const [path, group] of Object.entries(groups)) {
-      // Extract part ID from path (e.g., "/shapes/assembly/Left" -> "Left")
-      const id = path.split('/').pop();
-      if (!id) continue;
+      if (!path) continue;
 
-      // ObjectGroup has shapeGeometry property
-      const geometry = group.shapeGeometry;
-      const edges = group.types?.edges;
-
-      const handle = new PartHandle(id, group, geometry, { edges });
-      this._parts.set(id, handle);
+      const handle = new PartHandle(path, group);
+      this._parts.set(path, handle);
     }
   }
 
   /**
-   * Find a part in viewer's groups by ID.
-   * Handles path-based keys like "/shapes/assembly/PartName".
-   * @private
-   */
-  _findViewerGroup(id) {
-    const groups = this._viewer?.nestedGroup?.groups;
-    if (!groups) return null;
-
-    for (const [path, group] of Object.entries(groups)) {
-      if (path === id || path.endsWith('/' + id)) {
-        return { path, group };
-      }
-    }
-    return null;
-  }
-
-  /**
-   * Add a new part to the scene.
+   * Add a new part to the scene using a real ObjectGroup.
    * @param {Object} partData - Part data with shape, color, etc.
    * @returns {PartHandle|null}
    */
   add(partData) {
-    const { id, name, shape, color, alpha, loc } = partData;
+    const { id, loc } = partData;
     
-    if (!shape?.vertices || !this._viewer?.nestedGroup?.rootGroup) {
+    if (!partData.shape?.vertices || !this._viewer?.nestedGroup?.rootGroup) {
       return null;
     }
 
-    const opts = this._renderOptions || {};
-    const partColor = new THREE.Color(color || '#4a90d9');
-    const partAlpha = alpha != null ? alpha : 1.0;
-
-    // Create geometry
-    const positions = shape.vertices instanceof Float32Array 
-      ? shape.vertices : new Float32Array(shape.vertices);
-    const normals = shape.normals instanceof Float32Array
-      ? shape.normals : new Float32Array(shape.normals);
-    const triangles = shape.triangles instanceof Uint32Array
-      ? shape.triangles : new Uint32Array(shape.triangles);
-
-    const geometry = new THREE.BufferGeometry();
-    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    geometry.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
-    geometry.setIndex(new THREE.BufferAttribute(triangles, 1));
-    geometry.computeBoundingBox();
-    geometry.computeBoundingSphere();
-
-    // Create materials
-    const frontMaterial = new THREE.MeshStandardMaterial({
-      color: partColor,
-      metalness: opts.metalness || 0.3,
-      roughness: opts.roughness || 0.65,
-      polygonOffset: true,
-      polygonOffsetFactor: 1.0,
-      polygonOffsetUnits: 1.0,
-      transparent: true,
-      opacity: partAlpha,
-      depthWrite: partAlpha >= 1.0,
-      side: THREE.FrontSide,
-    });
-
-    const backMaterial = new THREE.MeshBasicMaterial({
-      color: partColor,
-      side: THREE.BackSide,
-      polygonOffset: true,
-      polygonOffsetFactor: 1.0,
-      polygonOffsetUnits: 1.0,
-      transparent: true,
-      opacity: partAlpha,
-      depthWrite: partAlpha >= 1.0,
-    });
-
-    // Create meshes
-    const frontMesh = new THREE.Mesh(geometry, frontMaterial);
-    frontMesh.name = name || id;
-    
-    const backMesh = new THREE.Mesh(geometry, backMaterial);
-    backMesh.name = name || id;
-
-    // Create group
-    const partGroup = new THREE.Group();
-    partGroup.name = id;
-    partGroup.add(frontMesh);
-    partGroup.add(backMesh);
-
-    // Create edges if provided
-    let edges = null;
-    if (shape.edges?.length > 0) {
-      const edgePositions = shape.edges instanceof Float32Array
-        ? shape.edges : new Float32Array(shape.edges);
-      
-      const edgeGeometry = new LineSegmentsGeometry();
-      edgeGeometry.setPositions(edgePositions);
-
-      const edgeMaterial = new LineMaterial({
-        color: opts.edgeColor || 0x333333,
-        linewidth: 1,
-        transparent: true,
-        depthWrite: true,
-      });
-      edgeMaterial.resolution.set(
-        this._viewer.display?.cadWidth || 800,
-        this._viewer.display?.height || 500
-      );
-
-      edges = new LineSegments2(edgeGeometry, edgeMaterial);
-      edges.name = `${name || id}_edges`;
-      edges.renderOrder = 999;
-      partGroup.add(edges);
-    }
+    // Create real ObjectGroup via factory
+    const group = createCADGroup(partData, this._getOptions());
 
     // Add to scene
-    this._viewer.nestedGroup.rootGroup.add(partGroup);
+    this._viewer.nestedGroup.rootGroup.add(group);
 
     // Register with viewer's internal groups
-    this._viewer.nestedGroup.groups[id] = {
-      shapeGeometry: geometry,
-      types: { front: frontMesh, back: backMesh, edges },
-      // Note: for our added parts, the group IS partGroup
-      // We store it but PartHandle handles the abstraction
-    };
+    this._viewer.nestedGroup.groups[id] = group;
+
+    // Setup clipping stencils (if clipping is enabled)
+    this._clippingExt.setupClipping(group);
 
     // Create and store handle
-    const handle = new PartHandle(id, partGroup, geometry, { edges });
+    const handle = new PartHandle(id, group);
     this._parts.set(id, handle);
 
     // Apply transform
@@ -345,32 +253,17 @@ export class PartManager {
   remove(id) {
     const handle = this._parts.get(id);
     if (handle) {
+      // Remove clipping first
+      this._clippingExt.removeClipping(handle.group);
+      
+      // Dispose handle (removes from scene and cleans up)
       handle.dispose();
       this._parts.delete(id);
     }
 
     // Also clean up viewer's internal groups
-    const found = this._findViewerGroup(id);
-    if (found) {
-      const { path, group } = found;
-      
-      // Remove from scene if not already done by handle
-      if (group.parent) {
-        group.parent.remove(group);
-      }
-
-      // Dispose viewer-created resources
-      if (group.shapeGeometry) {
-        group.shapeGeometry.dispose();
-      }
-      if (group.types) {
-        for (const mesh of Object.values(group.types)) {
-          if (mesh?.material) mesh.material.dispose();
-          if (mesh?.geometry) mesh.geometry.dispose();
-        }
-      }
-
-      delete this._viewer.nestedGroup.groups[path];
+    if (this._viewer?.nestedGroup?.groups?.[id]) {
+      delete this._viewer.nestedGroup.groups[id];
     }
   }
 
@@ -384,12 +277,9 @@ export class PartManager {
     
     // If we don't have a handle, try to create one from viewer's groups
     if (!handle) {
-      const found = this._findViewerGroup(id);
-      if (found) {
-        const { group } = found;
-        handle = new PartHandle(id, group, group.shapeGeometry, { 
-          edges: group.types?.edges 
-        });
+      const group = this._viewer?.nestedGroup?.groups?.[id];
+      if (group) {
+        handle = new PartHandle(id, group);
         this._parts.set(id, handle);
       }
     }
@@ -452,15 +342,14 @@ export class PartManager {
     return stats;
   }
 
-  /** @private Get all part IDs from viewer's groups */
+  /** @private Get all part IDs (paths) from viewer's groups */
   _getViewerPartIds() {
     const ids = new Set();
     const groups = this._viewer?.nestedGroup?.groups;
     if (!groups) return ids;
 
     for (const path of Object.keys(groups)) {
-      const id = path.split('/').pop();
-      if (id) ids.add(id);
+      if (path) ids.add(path);
     }
     return ids;
   }
@@ -468,6 +357,7 @@ export class PartManager {
   /** Clear all parts */
   clear() {
     for (const handle of this._parts.values()) {
+      this._clippingExt.removeClipping(handle.group);
       handle.dispose();
     }
     this._parts.clear();

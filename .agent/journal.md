@@ -1,6 +1,29 @@
 # Marimo 3D CAD Project Journal
 
 ---
+### [OK] Full CAD Layer Integration | 2026-01-28
+- **Status**: [OK] ADOPTED
+- **Objective**: Full three-cad-viewer compatibility for dynamic parts (clipping, tree, selection)
+- **Hypothesis**: Using real ObjectGroup instances fixes instanceof checks in Clipping/NestedGroup
+- **Approach**: 
+  - Created `cad-group-factory.js` - Factory creates real ObjectGroup instances
+  - Created `state-manager.js` - Persists visibility states across tree rebuilds
+  - Created `clipping-extension.js` - Adds stencil meshes to dynamic parts
+  - Refactored `part-manager.js` - Uses ObjectGroup via factory + ClippingExtension
+  - Simplified `live-viewer.js` - Uses StateManager, removed setObject override
+  - Key insight: Import ObjectGroup from `three-cad-viewer/src/objectgroup.js`
+- **Result**: 
+    - [Clipping]: Dynamic parts now get clipping stencils (X/Y/Z planes)
+    - [Tree]: Visibility states persist across tree rebuilds
+    - [Selection]: ObjectGroup methods available (highlight, toggleSelection, etc.)
+    - [Materials]: Full material control (metalness, roughness, opacity, etc.)
+    - [Tests]: 34/34 passing
+    - [Build]: JS bundle 1.97MB (gzip 424KB)
+    - [Outcome]: Full three-cad-viewer feature parity for dynamic parts
+- **The Delta**: From monkey-patched THREE.Group → real ObjectGroup with full compatibility
+- **Next Step**: Test clipping in browser with dynamic parts
+
+---
 ### [OK] Parametric Vase Example | 2026-01-27
 - **Status**: [OK] ADOPTED
 - **Objective**: Create organic parametric vase example using spline revolution

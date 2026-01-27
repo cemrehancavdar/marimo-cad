@@ -1,12 +1,17 @@
 /**
  * LiveViewer - Extended three-cad-viewer with live geometry updates
  * 
- * Provides reactive part management via PartManager abstraction.
+ * Provides reactive part management via:
+ * - PartManager: Add/remove/update parts with real ObjectGroup instances
+ * - StateManager: Persist visibility states across tree rebuilds
+ * - ClippingExtension: Clipping support for dynamically added parts
+ * 
  * Camera position preserved across updates.
  */
 
 import { Viewer } from "three-cad-viewer";
 import { PartManager } from "./part-manager.js";
+import { StateManager } from "./state-manager.js";
 
 /**
  * Extended Viewer with live geometry updates and stateful part management.
@@ -21,6 +26,7 @@ export class LiveViewer extends Viewer {
     super(display, options, notifyCallback);
     
     this._parts = new PartManager(this);
+    this._stateManager = new StateManager();
     this._renderOptions = null;
     this._viewerOptions = null;
     this._lastPartsData = null;
@@ -32,6 +38,14 @@ export class LiveViewer extends Viewer {
    */
   get parts() {
     return this._parts;
+  }
+
+  /**
+   * Get the StateManager for visibility state management.
+   * @returns {StateManager}
+   */
+  get stateManager() {
+    return this._stateManager;
   }
 
   /**
@@ -48,12 +62,15 @@ export class LiveViewer extends Viewer {
     // Build part map from viewer's state after render
     this._parts.buildFromViewer();
     
+    // Initialize state manager with initial part states
+    this._stateManager.initFromParts(this._lastPartsData);
+    
     return result;
   }
 
   /**
    * Sync parts with new data - intelligently add, remove, or update.
-   * Preserves camera position and scene state.
+   * Preserves camera position and visibility states.
    * 
    * @param {Object} shapesData - Shape data with parts array
    * @param {Object} options - Sync options
@@ -71,23 +88,37 @@ export class LiveViewer extends Viewer {
       return false;
     }
 
+    // Save visibility states from tree before sync
+    this._stateManager.saveFromTree(this.treeview);
+    
     // Use PartManager to sync geometries
     const stats = this._parts.sync(shapesData.parts);
+    
+    // Clean up states for removed parts
+    const currentIds = new Set(shapesData.parts.map(p => p.id));
+    this._stateManager.cleanupRemoved(currentIds);
+    
+    // Initialize states for new parts
+    this._stateManager.initFromParts(shapesData.parts);
     
     // Update tree view if parts were added or removed
     if (updateTree && (stats.added > 0 || stats.removed > 0)) {
       this._rebuildTreeView(shapesData.parts);
     }
     
+    // Apply saved visibility states to all groups
+    this._stateManager.applyToGroups(this.nestedGroup.groups);
+    
     this._lastPartsData = shapesData.parts;
 
     // Trigger three.js update
-    this.update(true);
+    this.update(this.updateMarker);
     return true;
   }
 
   /**
    * Rebuild the tree view to reflect current parts.
+   * Uses StateManager for visibility state preservation.
    * @private
    */
   _rebuildTreeView(partsData) {
@@ -95,7 +126,7 @@ export class LiveViewer extends Viewer {
       return;
     }
 
-    // Build new tree structure from parts
+    // Build new tree structure from parts, using saved states
     const newTree = this._buildTreeFromParts(partsData);
     
     // Update viewer's tree properties
@@ -112,9 +143,7 @@ export class LiveViewer extends Viewer {
     this.display.clearCadTree();
     
     // Create new TreeView using the internal constructor pattern
-    // Note: We access the internal TreeView class via the prototype chain
     try {
-      // Get the TreeView constructor from an existing instance
       const TreeViewClass = this.treeview.constructor;
       
       this.treeview = new TreeViewClass(
@@ -156,21 +185,41 @@ export class LiveViewer extends Viewer {
 
   /**
    * Build a tree structure from parts data.
-   * The tree structure expected by three-cad-viewer is:
-   * { "shapes": { "PartName": [shapeVisible, edgesVisible], ... } }
+   * Tree structure must match part IDs so paths align.
+   * Part ID "/Group/MyBox" -> tree { Group: { MyBox: [1,1] } }
+   * @param {Array} partsData - Parts data
    * @private
    */
   _buildTreeFromParts(partsData) {
-    const shapes = {};
+    const tree = {};
     
     for (const part of partsData) {
-      const name = part.name || part.id || 'Part';
-      // [1, 1] = [shape visible, edges visible]
-      const state = part.state || [1, 1];
-      shapes[name] = state;
+      const id = part.id || '';
+      
+      // Parse path segments from ID (e.g., "/Group/MyBox" -> ["Group", "MyBox"])
+      const segments = id.split('/').filter(s => s);
+      
+      if (segments.length === 0) continue;
+      
+      // Use saved state from StateManager, or part's default state
+      const state = this._stateManager.get(id);
+      
+      // Build nested structure
+      let current = tree;
+      for (let i = 0; i < segments.length - 1; i++) {
+        const seg = segments[i];
+        if (!current[seg]) {
+          current[seg] = {};
+        }
+        current = current[seg];
+      }
+      
+      // Set leaf with state
+      const leafName = segments[segments.length - 1];
+      current[leafName] = state;
     }
     
-    return { shapes };
+    return tree;
   }
 
   /**
@@ -189,7 +238,7 @@ export class LiveViewer extends Viewer {
    */
   updatePart(id, partData) {
     this._parts.update(id, partData);
-    this.update(true);
+    this.update(this.updateMarker);
   }
 
   /**
@@ -200,7 +249,9 @@ export class LiveViewer extends Viewer {
   addPart(partData) {
     const handle = this._parts.add(partData);
     if (handle) {
-      this.update(true);
+      // Initialize state for new part
+      this._stateManager.initFromParts([partData]);
+      this.update(this.updateMarker);
     }
     return handle;
   }
@@ -211,6 +262,7 @@ export class LiveViewer extends Viewer {
    */
   removePart(id) {
     this._parts.remove(id);
-    this.update(true);
+    this._stateManager.remove(id);
+    this.update(this.updateMarker);
   }
 }
