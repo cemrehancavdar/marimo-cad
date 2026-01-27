@@ -47,7 +47,7 @@ def _(Box, Pos, cad, mo):
 
         # Internal dimensions
         inner_width = width - 2 * side_t
-        inner_height = height - 2 * shelf_t
+        height - 2 * shelf_t
 
         # Left side
         left = Pos(-width / 2 + side_t / 2, 0, height / 2) * Box(side_t, depth, height)

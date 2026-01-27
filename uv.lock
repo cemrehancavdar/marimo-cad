@@ -887,7 +887,6 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "anywidget" },
-    { name = "bd-warehouse" },
     { name = "build123d" },
     { name = "marimo" },
     { name = "ocp-tessellate" },
@@ -898,18 +897,21 @@ dev = [
     { name = "pytest" },
     { name = "ruff" },
 ]
+gears = [
+    { name = "bd-warehouse" },
+]
 
 [package.metadata]
 requires-dist = [
     { name = "anywidget", specifier = ">=0.9.0" },
-    { name = "bd-warehouse", specifier = ">=0.1.0" },
+    { name = "bd-warehouse", marker = "extra == 'gears'", specifier = ">=0.1.0" },
     { name = "build123d", specifier = ">=0.10.0" },
     { name = "marimo", specifier = ">=0.9.0" },
     { name = "ocp-tessellate", specifier = ">=3.0.0" },
     { name = "pytest", marker = "extra == 'dev'" },
     { name = "ruff", marker = "extra == 'dev'" },
 ]
-provides-extras = ["dev"]
+provides-extras = ["dev", "gears"]
 
 [[package]]
 name = "markdown"

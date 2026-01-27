@@ -1,21 +1,39 @@
 [project]
 name = "marimo-cad"
 version = "0.1.0"
-description = "Parametric CAD (build123d) for marimo"
+description = "Reactive Parametric CAD for marimo notebooks"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
-authors = [{ name = "Your Name", email = "you@example.com" }]
+authors = [{ name = "Cemrehan Cavdar", email = "cemrehancavdar@hotmail.com" }]
+keywords = ["marimo", "cad", "build123d", "3d", "parametric", "anywidget"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Visualization",
+]
 dependencies = [
     "build123d>=0.10.0",
     "ocp-tessellate>=3.0.0",
     "anywidget>=0.9.0",
     "marimo>=0.9.0",
-    "bd_warehouse>=0.1.0",
 ]
 
 [project.optional-dependencies]
 dev = ["ruff", "pytest"]
+gears = ["bd_warehouse>=0.1.0"]
+
+[project.urls]
+Homepage = "https://github.com/cemrehancavdar/marimo-cad"
+Repository = "https://github.com/cemrehancavdar/marimo-cad"
+Issues = "https://github.com/cemrehancavdar/marimo-cad/issues"
 
 [build-system]
 requires = ["hatchling"]
@@ -23,6 +41,9 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/marimo_cad"]
+
+[tool.hatch.build]
+artifacts = ["src/marimo_cad/static/**"]
 
 [tool.ruff]
 line-length = 100
@@ -33,4 +54,4 @@ select = ["E", "F", "I", "N", "W", "UP"]
 ignore = ["E501"]
 
 [tool.ruff.lint.per-file-ignores]
-"notebooks/*.py" = ["N803"]  # marimo cell functions use class names as args
+"notebooks/*.py" = ["N803"]
