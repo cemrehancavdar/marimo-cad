@@ -44,6 +44,12 @@ Thumbs.db
 src/marimo_cad/static/widget.js
 src/marimo_cad/static/widget.css
 
+# Playwright
+test-results/
+playwright-report/
+blob-report/
+.playwright/
+
 # Marimo cache
 **/__marimo__/
 

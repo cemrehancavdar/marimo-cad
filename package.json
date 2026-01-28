@@ -1,0 +1,30 @@
+{
+  "name": "marimo-3d-cad",
+  "version": "1.0.0",
+  "description": "**Reactive Parametric CAD** for [marimo](https://marimo.io) notebooks.",
+  "main": "index.js",
+  "directories": {
+    "test": "tests"
+  },
+  "scripts": {
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:headed": "playwright test --headed",
+    "playwright:install": "playwright install chromium"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cemrehancavdar/marimo-cad.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/cemrehancavdar/marimo-cad/issues"
+  },
+  "homepage": "https://github.com/cemrehancavdar/marimo-cad#readme",
+  "devDependencies": {
+    "@playwright/test": "^1.58.0"
+  }
+}
