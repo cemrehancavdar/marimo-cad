@@ -30,7 +30,80 @@ export class LiveViewer extends Viewer {
     this._renderOptions = null;
     this._viewerOptions = null;
     this._lastPartsData = null;
+    
+    // Override getNodeColor to use duck typing instead of instanceof
+    // This fixes color lookup for dynamically added parts where
+    // ObjectGroup instanceof check fails due to separate class copies
+    this.getNodeColor = this._getNodeColorFixed;
+    
+    // Override setObject to use duck typing instead of instanceof
+    // This fixes visibility toggle for dynamically added parts
+    this.setObject = this._setObjectFixed;
   }
+
+  /**
+   * Fixed getNodeColor that uses duck typing instead of instanceof ObjectGroup.
+   * The original relies on instanceof which fails for our dynamically created groups.
+   * @param {string} path - Node path without leading slash
+   * @returns {string|null} - Hex color string or null
+   */
+  _getNodeColorFixed = (path) => {
+    const group = this.nestedGroup?.groups?.["/" + path];
+    if (!group) return null;
+    
+    // Duck type check: group should have children with materials
+    // This matches ObjectGroup structure without instanceof
+    if (!group.children || group.children.length === 0) return null;
+    
+    // Find the front material color (same logic as original getNodeColor)
+    let color = null;
+    const firstChild = group.children[0];
+    if (firstChild?.material?.color) {
+      if (firstChild.type !== "Mesh" || firstChild.material.name === "frontMaterial") {
+        color = firstChild.material.color;
+      } else if (group.children[1]?.material?.color) {
+        color = group.children[1].material.color;
+      }
+    }
+    
+    return color ? "#" + color.getHexString() : null;
+  };
+
+  /**
+   * Fixed setObject that uses duck typing instead of instanceof ObjectGroup.
+   * The original relies on instanceof which fails for our dynamically created groups.
+   * @param {string} path - Node path (with leading slash)
+   * @param {number} state - 0 or 1 for visibility
+   * @param {number} iconNumber - 0 for shape, 1 for edges
+   * @param {boolean} notify - Whether to notify state change
+   * @param {boolean} update - Whether to trigger render update
+   */
+  _setObjectFixed = (path, state, iconNumber, notify = true, update = true) => {
+    const objectGroup = this.nestedGroup?.groups?.[path];
+    if (!objectGroup) return;
+    
+    // Duck type check: must have setShapeVisible and setEdgesVisible methods
+    if (typeof objectGroup.setShapeVisible !== 'function' || 
+        typeof objectGroup.setEdgesVisible !== 'function') {
+      return;
+    }
+    
+    if (iconNumber === 0) {
+      objectGroup.setShapeVisible(state === 1);
+    } else {
+      objectGroup.setEdgesVisible(state === 1);
+    }
+    
+    if (notify && this.notifyStates) {
+      const stateObj = {};
+      stateObj[path] = this.getState(path);
+      // notifyStates is called but we don't need to do anything special here
+    }
+    
+    if (update) {
+      this.update(this.updateMarker);
+    }
+  };
 
   /**
    * Get the PartManager for direct part manipulation.

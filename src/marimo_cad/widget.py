@@ -113,6 +113,47 @@ class _CADWidget(anywidget.AnyWidget):
     height = traitlets.Int(600).tag(sync=True)
     selected = traitlets.Dict({}).tag(sync=True)
 
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self._pending_shapes: dict | None = None
+        self._js_ready = False
+        # Listen for "ready" message from JS
+        self.on_msg(self._on_custom_msg)
+
+    def _on_custom_msg(self, widget: Any, content: dict, buffers: list | None = None) -> None:
+        """Handle custom messages from JS.
+
+        Note: ipywidgets callback signature is (widget, content, buffers).
+        The content IS the message payload sent from JS via model.send().
+        """
+        logger.debug("Received custom message: %s", content)
+        if content.get("type") == "ready":
+            logger.debug("JS ready signal received, pending=%s", self._pending_shapes is not None)
+            self._js_ready = True
+            # Send pending shapes now that JS is ready
+            if self._pending_shapes is not None:
+                self.shapes_data = self._pending_shapes
+                self._pending_shapes = None
+                logger.debug("Sending deferred shapes_data")
+                try:
+                    self.send_state("shapes_data")
+                except Exception:
+                    logger.exception("Failed to send_state")
+
+    def set_shapes(self, data: dict) -> None:
+        """Set shapes data, deferring if JS not ready."""
+        if self._js_ready:
+            # JS ready, send immediately
+            self.shapes_data = data
+            try:
+                self.send_state("shapes_data")
+            except Exception:
+                pass
+        else:
+            # Store for later, also set on widget for initial sync
+            self._pending_shapes = data
+            self.shapes_data = data
+
 
 class Viewer:
     """
@@ -162,7 +203,8 @@ class Viewer:
             viewer.render([box, cylinder])
             viewer.render({"shape": box, "name": "Base", "color": "blue"})
         """
-        self._wrapped.widget.shapes_data = _tessellate(shapes)
+        data = _tessellate(shapes)
+        self._wrapped.widget.set_shapes(data)
 
     def _mime_(self) -> tuple[str, str]:
         """Allow marimo to display this directly."""

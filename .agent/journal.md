@@ -1,6 +1,64 @@
 # Marimo 3D CAD Project Journal
 
 ---
+### [OK] Tree Icon Fix for Dynamic Parts | 2026-01-28
+- **Status**: [OK] ADOPTED
+- **Objective**: Fix missing ⚈ color icons for dynamically added parts in tree view
+- **Root Cause**: `instanceof ObjectGroup` check in `viewer.getNodeColor()` fails
+  - We import ObjectGroup from `three-cad-viewer/src/objectgroup.js`
+  - three-cad-viewer uses its own bundled copy internally
+  - These are two separate class instances in the bundle, so `instanceof` fails
+- **Approach**: 
+  - Override `getNodeColor` in LiveViewer constructor
+  - Use duck typing instead of `instanceof ObjectGroup`
+  - Check for `group.children` with materials instead of class type
+- **Result**:
+  - [Tree Icons]: New shelves (Shelf 3, Shelf 4) now have ⚈ color icons
+  - [Visibility Toggle]: Toggle works for all parts including dynamic ones
+  - [Tests]: 34/34 passing
+  - [Lint]: ruff passes
+  - [Outcome]: Full tree interaction for dynamic parts
+- **The Delta**: From "instanceof fails across bundles" → "duck typing works universally"
+- **Next Step**: None - tree interaction complete
+
+---
+### [OK] CONSTRAINT: No Widget Rerenders | 2026-01-28
+- **Status**: [OK] CONSTRAINT - SATISFIED
+- **Rule**: NEVER recreate the marimo anywidget wrapper after initial creation
+- **Reason**: Recreating wrapper causes:
+  - Camera position reset (defeats core value proposition)
+  - Widget re-mount in DOM
+  - Loss of UI state (tree expansion, selections)
+- **Solution Found**: Ready Signal pattern
+  - JS sends `model.send({ type: "ready" })` when initialized
+  - Python receives via `on_msg()` callback, sends pending data
+  - No widget recreation needed, camera preserved
+
+---
+### [OK] Initial Render Bug - Ready Signal Fix | 2026-01-28
+- **Status**: [OK] ADOPTED
+- **Objective**: Fix empty viewer on first load (before any slider change)
+- **Root Cause**: marimo's `mo.ui.anywidget()` captures widget state at creation and does NOT sync subsequent Python traitlet changes to JS
+- **Bug Found**: `_handle_msg` callback had wrong signature!
+  - ipywidgets passes `(widget, content, buffers)` to registered callbacks
+  - Our code had `(msg, buffers)` and looked for `msg["content"]["type"]`
+  - Fixed: renamed to `_on_custom_msg(self, widget, content, buffers)`
+  - Now `content.get("type") == "ready"` works correctly
+- **Ready Signal Flow**:
+  1. Widget created, `render()` stores `_pending_shapes`
+  2. JS initializes, sends `model.send({ type: "ready" })`
+  3. Python receives `content = { type: "ready" }`, sets `shapes_data` from pending
+  4. JS receives `change:shapes_data` event, renders geometry
+- **Result**:
+  - [Initial Render]: Geometry appears on first load ✓
+  - [Slider Updates]: Changing shelves 4→6 adds Shelf 3, Shelf 4 ✓
+  - [Camera]: Position preserved during updates ✓
+  - [Tests]: 34/34 passing
+  - [Outcome]: Initial render bug FIXED
+- **The Delta**: From "wrong callback signature" → "correct ipywidgets (widget, content, buffers) signature"
+- **Next Step**: None - feature complete
+
+---
 ### [OK] Full CAD Layer Integration | 2026-01-28
 - **Status**: [OK] ADOPTED
 - **Objective**: Full three-cad-viewer compatibility for dynamic parts (clipping, tree, selection)

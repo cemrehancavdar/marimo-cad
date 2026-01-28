@@ -8,11 +8,15 @@ app = marimo.App(width="medium")
 
 @app.cell
 def _():
+    return
+
+
+@app.cell
+def _():
     import marimo as mo
     from build123d import Box, Pos
 
     import marimo_cad as cad
-
     return Box, Pos, cad, mo
 
 
@@ -92,18 +96,7 @@ def _(Box, Pos, height_slider, mo, shelf_slider, viewer):
     viewer.render(parts)
 
     mo.vstack([mo.hstack([shelf_slider, height_slider]), viewer])
-    return (
-        BACK_COLOR,
-        BACK_T,
-        DEPTH,
-        SHELF_COLOR,
-        SHELF_T,
-        SIDE_COLOR,
-        SIDE_T,
-        WIDTH,
-        build_bookshelf,
-        parts,
-    )
+    return
 
 
 if __name__ == "__main__":

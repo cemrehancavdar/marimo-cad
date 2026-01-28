@@ -74,6 +74,11 @@ export function render({ model, el }) {
     });
     
     initialized = true;
+    
+    // Signal to Python that JS is ready to receive data
+    model.send({ type: "ready" });
+    
+    // Try to render any data that's already available
     renderShapes();
     
     // Set the viewer's internal cadWidth to match display
