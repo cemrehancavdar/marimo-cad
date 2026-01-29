@@ -1,6 +1,61 @@
 # Marimo 3D CAD Project Journal
 
 ---
+### [OK] Visual Regression Testing | 2026-01-29
+- **Status**: [OK] ADOPTED
+- **Objective**: Set up proper visual regression testing with optimized snapshots
+- **Approach**: 
+  - Converted tests from `page.screenshot()` to `expect(page).toHaveScreenshot()`
+  - Added `maxDiffPixels: 500` and `threshold: 0.2` for WebGL rendering variations
+  - Installed `oxipng` for lossless PNG compression
+  - Added `npm run test:e2e:update` script to update + optimize baselines
+- **Result**:
+  - [Snapshots]: 7 baseline images in `cad-viewer.spec.js-snapshots/`
+  - [Compression]: 560KB -> 420KB (27% reduction, lossless)
+  - [Comparison]: Pixel-based diff on every test run
+  - [Tests]: 7/7 passing with optimized baselines
+  - [Outcome]: Safe refactoring with visual regression protection
+- **The Delta**: From "manual screenshots" -> "automated visual regression with comparison"
+- **Next Step**: None - visual regression testing complete
+
+---
+### [OK] Clipping E2E Tests | 2026-01-29
+- **Status**: [OK] ADOPTED
+- **Objective**: Add e2e tests verifying clipping works on initial render and dynamic parts
+- **Approach**: 
+  - Added test to find clip slider (range input with negative min value)
+  - Test moves slider to middle position to apply clipping
+  - Verified clipping doesn't crash viewer and Ready status remains
+  - Screenshot captures for visual verification
+- **Result**:
+  - [E2E Tests]: 7/7 passing (2 new clipping tests)
+  - [Screenshots]: `test-clipping-initial.png`, `test-clipping-dynamic.png`
+  - [Dynamic Parts]: Clipping applies correctly to shelves added after initial render
+  - [Outcome]: Clipping functionality verified via automation
+- **The Delta**: From "untested clipping" → "e2e coverage for clipping on static and dynamic parts"
+- **Next Step**: None - clipping verified working
+
+---
+### [OK] Code Smell Refactor | 2026-01-29
+- **Status**: [OK] ADOPTED
+- **Objective**: Clean up timing hacks, silent exceptions, dead code, magic numbers
+- **Approach**: 
+  - Replaced `setTimeout` with `requestAnimationFrame` for proper frame timing
+  - Added `console.warn` to all silent exception handlers for debugging
+  - Removed dead `stateObj` code in `_setObjectFixed`
+  - Added `COLLAPSE_MODE` constants for tree collapse magic numbers
+  - Added logging to Python exception handlers
+  - Clarified dual-state pattern in widget.py with comments
+- **Result**:
+  - [E2E Tests]: 5/5 passing
+  - [Unit Tests]: 34/34 passing
+  - [Lint]: ruff passes
+  - [Build]: 1.97MB (gzip 424KB) - no size change
+  - [Outcome]: Cleaner, more debuggable codebase
+- **The Delta**: From "silent failures and timing hacks" → "proper frame timing and logged errors"
+- **Next Step**: None - code smells addressed
+
+---
 ### [OK] Tree Icon Fix for Dynamic Parts | 2026-01-28
 - **Status**: [OK] ADOPTED
 - **Objective**: Fix missing ⚈ color icons for dynamically added parts in tree view

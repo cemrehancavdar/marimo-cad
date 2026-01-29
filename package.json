@@ -10,6 +10,7 @@
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:headed": "playwright test --headed",
+    "test:e2e:update": "playwright test --update-snapshots && oxipng -o 4 tests/e2e/*.spec.js-snapshots/*.png",
     "playwright:install": "playwright install chromium"
   },
   "repository": {

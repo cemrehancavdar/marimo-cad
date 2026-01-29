@@ -14,6 +14,17 @@ import { PartManager } from "./part-manager.js";
 import { StateManager } from "./state-manager.js";
 
 /**
+ * Tree collapse mode constants (match three-cad-viewer API).
+ * @see https://github.com/bernhard-42/three-cad-viewer
+ */
+const COLLAPSE_MODE = {
+  EXPAND_ALL: 0,      // Show all nodes expanded
+  ROOT_ONLY: 1,       // Collapse to root level only  
+  COLLAPSE_ALL: 2,    // All nodes collapsed
+  FIRST_LEVEL: 3,     // Expand first level only
+};
+
+/**
  * Extended Viewer with live geometry updates and stateful part management.
  * 
  * Usage:
@@ -94,11 +105,8 @@ export class LiveViewer extends Viewer {
       objectGroup.setEdgesVisible(state === 1);
     }
     
-    if (notify && this.notifyStates) {
-      const stateObj = {};
-      stateObj[path] = this.getState(path);
-      // notifyStates is called but we don't need to do anything special here
-    }
+    // Note: Original Viewer.setObject calls notifyStates here, but we don't need
+    // state change notifications for our use case (visibility is managed internally)
     
     if (update) {
       this.update(this.updateMarker);
@@ -236,18 +244,18 @@ export class LiveViewer extends Viewer {
       this.display.addCadTree(treeElement);
       this.treeview.render();
       
-      // Apply collapse setting
+      // Apply collapse setting from viewer options
       switch (this.collapse) {
-        case 0:
+        case COLLAPSE_MODE.EXPAND_ALL:
           this.treeview.expandAll();
           break;
-        case 1:
+        case COLLAPSE_MODE.ROOT_ONLY:
           this.treeview.openLevel(-1);
           break;
-        case 2:
+        case COLLAPSE_MODE.COLLAPSE_ALL:
           this.treeview.collapseAll();
           break;
-        case 3:
+        case COLLAPSE_MODE.FIRST_LEVEL:
           this.treeview.openLevel(1);
           break;
       }

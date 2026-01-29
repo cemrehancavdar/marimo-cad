@@ -81,15 +81,17 @@ export function render({ model, el }) {
     // Try to render any data that's already available
     renderShapes();
     
-    // Set the viewer's internal cadWidth to match display
-    // Use setTimeout to ensure three.js renderer is initialized
-    setTimeout(() => {
-      try {
-        viewer.resizeCadView(cadWidth, treeWidth, height, false);
-      } catch (e) {
-        // Ignore if viewer not ready
+    // Set the viewer's internal cadWidth to match display after first render frame
+    // Using requestAnimationFrame ensures three.js renderer is initialized
+    requestAnimationFrame(() => {
+      if (viewer.ready) {
+        try {
+          viewer.resizeCadView(cadWidth, treeWidth, height, false);
+        } catch (e) {
+          console.warn('[marimo-cad] Initial resize failed:', e.message);
+        }
       }
-    }, 50);
+    });
   }
 
   function renderShapes() {
@@ -111,7 +113,9 @@ export function render({ model, el }) {
 
     // First render or syncParts not available - full render needed
     if (viewer.nestedGroup) {
-      try { viewer.clear(); } catch (e) {}
+      try { viewer.clear(); } catch (e) {
+        console.warn('[marimo-cad] Failed to clear viewer:', e.message);
+      }
     }
     viewer.render(shapesData, DEFAULT_RENDER_OPTIONS, DEFAULT_VIEWER_OPTIONS);
   }
@@ -131,7 +135,7 @@ export function render({ model, el }) {
       });
       viewer.resizeCadView(newCadWidth, treeWidth, height, false);
     } catch (e) {
-      // Ignore resize errors
+      console.warn('[marimo-cad] Resize failed:', e.message);
     }
   }
 
@@ -153,18 +157,21 @@ export function render({ model, el }) {
   });
   resizeObserver.observe(container);
 
-  // Fallback: initialize after a short delay if ResizeObserver hasn't fired
-  setTimeout(() => {
+  // Fallback: initialize after animation frame if ResizeObserver hasn't fired
+  // This handles edge cases where container has fixed width (no resize event)
+  requestAnimationFrame(() => {
     if (!initialized) {
       initializeViewer();
     }
-  }, 50);
+  });
 
   return () => {
     resizeObserver.disconnect();
     if (resizeTimeout) clearTimeout(resizeTimeout);
     if (viewer) {
-      try { viewer.dispose(); } catch(e) {}
+      try { viewer.dispose(); } catch(e) {
+        console.warn('[marimo-cad] Dispose failed:', e.message);
+      }
     }
     container.innerHTML = "";
   };

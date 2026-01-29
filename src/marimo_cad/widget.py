@@ -148,9 +148,11 @@ class _CADWidget(anywidget.AnyWidget):
             try:
                 self.send_state("shapes_data")
             except Exception:
-                pass
+                logger.exception("Failed to send shapes_data state")
         else:
-            # Store for later, also set on widget for initial sync
+            # JS not ready yet - store in _pending_shapes for later delivery.
+            # Also set shapes_data so marimo's anywidget wrapper captures it
+            # during initial state sync. The "ready" signal will re-send it.
             self._pending_shapes = data
             self.shapes_data = data
 
