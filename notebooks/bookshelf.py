@@ -17,6 +17,7 @@ def _():
     from build123d import Box, Pos
 
     import marimo_cad as cad
+
     return Box, Pos, cad, mo
 
 
@@ -70,8 +71,8 @@ def _(Box, Pos, height_slider, mo, shelf_slider, viewer):
         right = Pos(WIDTH / 2 - SIDE_T / 2, 0, height / 2) * Box(SIDE_T, DEPTH, height)
         parts.append({"shape": right, "name": "Right Side", "color": SIDE_COLOR})
 
-        # Back panel
-        back = Pos(0, -DEPTH / 2 + BACK_T / 2, height / 2) * Box(inner_width, BACK_T, height)
+        # Back panel (at +Y so front faces camera)
+        back = Pos(0, DEPTH / 2 - BACK_T / 2, height / 2) * Box(inner_width, BACK_T, height)
         parts.append({"shape": back, "name": "Back", "color": BACK_COLOR})
 
         # Top panel
