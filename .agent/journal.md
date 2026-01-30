@@ -1,6 +1,29 @@
 # Marimo 3D CAD Project Journal
 
 ---
+### [OK] Documentation Expansion | 2026-01-30
+- **Status**: [OK] ADOPTED
+- **Objective**: Add comprehensive API reference and documentation to README
+- **Approach**: 
+  - Expanded README from 109 to 346 lines
+  - Added full API reference: Viewer, PartSpec, COLORS, export functions
+  - Added parameter tables with types and defaults
+  - Added code examples for each API
+  - Added "Viewer Features" section describing three-cad-viewer capabilities
+  - Added "How It Works" section explaining the pipeline
+  - Added "Limitations" section for transparency
+  - Cleaned up empty notebook stubs (debug_update.py, shelf_system.py)
+- **Result**:
+  - [README]: Comprehensive documentation (346 lines)
+  - [API Ref]: All public exports documented with examples
+  - [Tests]: 34/34 passing
+  - [Lint]: ruff passes
+  - [Build]: Package builds successfully for PyPI
+  - [Outcome]: Ready for v0.1.0 release
+- **The Delta**: From "basic README" → "full API reference with examples"
+- **Next Step**: Publish to PyPI when ready
+
+---
 ### [OK] Code Refactoring - Constants & Utils | 2026-01-30
 - **Status**: [OK] ADOPTED
 - **Objective**: Extract constants and utilities to reduce duplication and improve maintainability
