@@ -4,29 +4,18 @@
 
 import { Display } from "three-cad-viewer";
 import { LiveViewer } from "./live-viewer.js";
+import {
+  DEFAULT_RENDER_OPTIONS,
+  DEFAULT_VIEWER_OPTIONS,
+  DEFAULT_DISPLAY_OPTIONS,
+  TREE_WIDTH,
+  INTERNAL_PADDING,
+  MIN_CAD_WIDTH,
+  FALLBACK_WIDTH,
+  RESIZE_DEBOUNCE_MS,
+} from "./constants.js";
 import "three-cad-viewer/dist/three-cad-viewer.css";
 import "./styles.css";
-
-const DEFAULT_RENDER_OPTIONS = {
-  ambientIntensity: 1.0,
-  directIntensity: 1.1,
-  metalness: 0.3,
-  roughness: 0.65,
-  edgeColor: 0x333333,
-  defaultOpacity: 0.5,
-  normalLen: 0,
-};
-
-const DEFAULT_VIEWER_OPTIONS = {
-  up: "Z",
-  axes: true,
-  axes0: true,
-  grid: [true, false, false],
-  ortho: true,
-  transparent: false,
-  blackEdges: true,
-  collapse: 1,
-};
 
 export function render({ model, el }) {
   const widthRaw = model.get("width") || "100%";
@@ -41,9 +30,6 @@ export function render({ model, el }) {
   container.style.height = height + "px";
   el.appendChild(container);
 
-  const treeWidth = 200;
-  // three-cad-viewer adds internal padding/borders (~12px total)
-  const internalPadding = 12;
   let display = null;
   let viewer = null;
   let resizeTimeout = null;
@@ -54,15 +40,14 @@ export function render({ model, el }) {
     
     // Measure actual container width after it's in the DOM
     const measuredWidth = container.getBoundingClientRect().width;
-    const totalWidth = measuredWidth > 0 ? Math.floor(measuredWidth) : 800;
-    const cadWidth = Math.max(totalWidth - treeWidth - internalPadding, 400);
+    const totalWidth = measuredWidth > 0 ? Math.floor(measuredWidth) : FALLBACK_WIDTH;
+    const cadWidth = Math.max(totalWidth - TREE_WIDTH - INTERNAL_PADDING, MIN_CAD_WIDTH);
 
     const displayOptions = {
+      ...DEFAULT_DISPLAY_OPTIONS,
       cadWidth: cadWidth,
       height: height,
-      treeWidth: treeWidth,
-      theme: "browser",
-      pinning: false,
+      treeWidth: TREE_WIDTH,
     };
 
     display = new Display(container, displayOptions);
@@ -86,7 +71,7 @@ export function render({ model, el }) {
     requestAnimationFrame(() => {
       if (viewer.ready) {
         try {
-          viewer.resizeCadView(cadWidth, treeWidth, height, false);
+          viewer.resizeCadView(cadWidth, TREE_WIDTH, height, false);
         } catch (e) {
           console.warn('[marimo-cad] Initial resize failed:', e.message);
         }
@@ -126,14 +111,14 @@ export function render({ model, el }) {
   function resizeDisplay(containerWidth) {
     if (!display || !viewer || !viewer.ready) return;
     
-    const newCadWidth = Math.max(Math.floor(containerWidth) - treeWidth - internalPadding, 400);
+    const newCadWidth = Math.max(Math.floor(containerWidth) - TREE_WIDTH - INTERNAL_PADDING, MIN_CAD_WIDTH);
     try {
       display.setSizes({ 
         cadWidth: newCadWidth, 
         height: height,
-        treeWidth: treeWidth 
+        treeWidth: TREE_WIDTH,
       });
-      viewer.resizeCadView(newCadWidth, treeWidth, height, false);
+      viewer.resizeCadView(newCadWidth, TREE_WIDTH, height, false);
     } catch (e) {
       console.warn('[marimo-cad] Resize failed:', e.message);
     }
@@ -151,7 +136,7 @@ export function render({ model, el }) {
         if (resizeTimeout) clearTimeout(resizeTimeout);
         resizeTimeout = setTimeout(() => {
           resizeDisplay(newWidth);
-        }, 100);
+        }, RESIZE_DEBOUNCE_MS);
       }
     }
   });

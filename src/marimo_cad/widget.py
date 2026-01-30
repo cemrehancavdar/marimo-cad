@@ -10,7 +10,9 @@ from typing import TYPE_CHECKING, Any
 import anywidget
 import traitlets
 
+from marimo_cad.constants import DEFAULT_HEIGHT, DEFAULT_WIDTH
 from marimo_cad.tessellate import to_viewer_format
+from marimo_cad.utils import normalize_parts
 
 logger = logging.getLogger(__name__)
 
@@ -29,58 +31,10 @@ if TYPE_CHECKING:
 Shape = Any
 STATIC_DIR = pathlib.Path(__file__).parent / "static"
 
-COLORS = {
-    "blue": "#4a90d9",
-    "red": "#e85454",
-    "green": "#50e850",
-    "yellow": "#e8b024",
-    "orange": "#e87824",
-    "purple": "#b024e8",
-    "cyan": "#24e8b0",
-    "pink": "#e824b0",
-    "gray": "#888888",
-    "white": "#ffffff",
-    "black": "#333333",
-}
-
-
-def _resolve_color(color: str | None) -> str | None:
-    if color is None:
-        return None
-    return COLORS.get(color.lower(), color)
-
-
-def _is_part_spec(item: Any) -> bool:
-    return isinstance(item, dict) and "shape" in item
-
-
-def _is_sequence_of_parts(item: Any) -> bool:
-    if isinstance(item, (list, tuple)):
-        return True
-    if hasattr(item, "__iter__") and hasattr(item, "__next__"):
-        return True
-    return False
-
-
-def _unpack(item: Any) -> tuple[Any, str | None, str | None, float | None]:
-    if _is_part_spec(item):
-        return (
-            item["shape"],
-            item.get("name"),
-            _resolve_color(item.get("color")),
-            item.get("alpha"),
-        )
-    return (item, None, None, None)
-
 
 def _tessellate(parts: Shape | PartSpec | Sequence[Shape | PartSpec]) -> dict:
     """Convert shapes to viewer format."""
-    if _is_part_spec(parts) or not _is_sequence_of_parts(parts):
-        items = [parts]
-    else:
-        items = list(parts)
-
-    objects = [_unpack(item) for item in items]
+    objects = normalize_parts(parts)
 
     if not objects:
         return {}
@@ -109,8 +63,8 @@ class _CADWidget(anywidget.AnyWidget):
     _css = STATIC_DIR / "widget.css"
 
     shapes_data = traitlets.Dict().tag(sync=True)
-    width = traitlets.Unicode("100%").tag(sync=True)
-    height = traitlets.Int(600).tag(sync=True)
+    width = traitlets.Unicode(DEFAULT_WIDTH).tag(sync=True)
+    height = traitlets.Int(DEFAULT_HEIGHT).tag(sync=True)
     selected = traitlets.Dict({}).tag(sync=True)
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
@@ -172,8 +126,8 @@ class Viewer:
     def __init__(
         self,
         *,
-        width: str | int = "100%",
-        height: int = 600,
+        width: str | int = DEFAULT_WIDTH,
+        height: int = DEFAULT_HEIGHT,
     ) -> None:
         """
         Create a reactive CAD viewer.

@@ -1,6 +1,29 @@
 # Marimo 3D CAD Project Journal
 
 ---
+### [OK] Code Refactoring - Constants & Utils | 2026-01-30
+- **Status**: [OK] ADOPTED
+- **Objective**: Extract constants and utilities to reduce duplication and improve maintainability
+- **Approach**: 
+  - Created `js/src/constants.js` - unified JS defaults (render options, layout, collapse modes)
+  - Created `src/marimo_cad/constants.py` - colors, defaults, empty_shapes()
+  - Created `src/marimo_cad/utils.py` - resolve_color, is_part_spec, normalize_parts
+  - Updated index.js to use constants (166 lines, clean closure pattern)
+  - Updated cad-group-factory.js to use shared constants
+  - Updated live-viewer.js to use COLLAPSE_MODE from constants
+  - Updated widget.py to use utils.normalize_parts() (176 lines, down from 209)
+  - Updated tessellate.py to use constants (removed duplicated defaults)
+- **Result**:
+  - [JS Constants]: Single source of truth for render/viewer/display options
+  - [Python Constants]: COLORS, DEFAULT_*, empty_shapes() centralized
+  - [Utils]: Clean helper functions with docstrings
+  - [Tests]: 34/34 Python + 7/7 e2e passing
+  - [Lint]: ruff passes
+  - [Outcome]: Cleaner, more maintainable codebase
+- **The Delta**: From "scattered magic numbers and duplicated defaults" → "centralized constants and utilities"
+- **Next Step**: Consider contributing dynamic part API to three-cad-viewer upstream
+
+---
 ### [OK] Visual Regression Testing | 2026-01-29
 - **Status**: [OK] ADOPTED
 - **Objective**: Set up proper visual regression testing with optimized snapshots

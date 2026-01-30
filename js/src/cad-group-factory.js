@@ -14,19 +14,17 @@ import { ObjectGroup } from "three-cad-viewer/src/objectgroup.js";
 import { LineSegmentsGeometry } from "three/examples/jsm/lines/LineSegmentsGeometry.js";
 import { LineMaterial } from "three/examples/jsm/lines/LineMaterial.js";
 import { LineSegments2 } from "three/examples/jsm/lines/LineSegments2.js";
+import {
+  DEFAULT_RENDER_OPTIONS,
+  DEFAULT_EDGE_COLOR,
+  DEFAULT_PART_COLOR,
+  DEFAULT_PART_STATE,
+  DEFAULT_PART_ALPHA,
+  FALLBACK_WIDTH,
+} from "./constants.js";
 
-/**
- * Default render options matching three-cad-viewer defaults
- */
-const DEFAULT_OPTIONS = {
-  metalness: 0.3,
-  roughness: 0.65,
-  defaultOpacity: 1.0,
-  edgeColor: 0x333333,
-  transparent: false,
-  width: 800,
-  height: 600,
-};
+/** Default height for line material resolution */
+const DEFAULT_HEIGHT = 600;
 
 /**
  * Create edges mesh from edge data
@@ -43,8 +41,9 @@ function createEdges(edgeData, options, state) {
   const lineGeometry = new LineSegmentsGeometry();
   lineGeometry.setPositions(positions);
 
+  const edgeColor = options.edgeColor ?? DEFAULT_EDGE_COLOR;
   const lineMaterial = new LineMaterial({
-    color: new THREE.Color(options.edgeColor),
+    color: new THREE.Color(edgeColor),
     linewidth: 1,
     transparent: true,
     depthWrite: !options.transparent,
@@ -52,7 +51,7 @@ function createEdges(edgeData, options, state) {
     clipIntersection: false,
   });
   lineMaterial.visible = state[1] === 1;
-  lineMaterial.resolution.set(options.width, options.height);
+  lineMaterial.resolution.set(options.width || FALLBACK_WIDTH, options.height || DEFAULT_HEIGHT);
 
   const edges = new LineSegments2(lineGeometry, lineMaterial);
   edges.renderOrder = 999;
@@ -76,12 +75,12 @@ function createEdges(edgeData, options, state) {
  * @returns {ObjectGroup}
  */
 export function createCADGroup(partData, options = {}) {
-  const opts = { ...DEFAULT_OPTIONS, ...options };
+  const opts = { ...DEFAULT_RENDER_OPTIONS, width: FALLBACK_WIDTH, height: DEFAULT_HEIGHT, ...options };
   const { id, name, shape, color, alpha, state } = partData;
   
-  const partColor = new THREE.Color(color || '#4a90d9');
-  const partAlpha = alpha != null ? alpha : 1.0;
-  const partState = state || [1, 1];
+  const partColor = new THREE.Color(color || DEFAULT_PART_COLOR);
+  const partAlpha = alpha ?? DEFAULT_PART_ALPHA;
+  const partState = state || DEFAULT_PART_STATE;
   const renderback = true;
 
   // Create ObjectGroup exactly like NestedGroup.renderShape()

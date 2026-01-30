@@ -144,21 +144,21 @@ class TestColorResolution:
 
     def test_named_colors(self):
         """Named colors are resolved to hex."""
-        from marimo_cad.widget import _resolve_color
+        from marimo_cad.utils import resolve_color
 
-        assert _resolve_color("blue") == "#4a90d9"
-        assert _resolve_color("red") == "#e85454"
-        assert _resolve_color("GREEN") == "#50e850"
+        assert resolve_color("blue") == "#4a90d9"
+        assert resolve_color("red") == "#e85454"
+        assert resolve_color("GREEN") == "#50e850"
 
     def test_hex_colors_passthrough(self):
         """Hex colors pass through unchanged."""
-        from marimo_cad.widget import _resolve_color
+        from marimo_cad.utils import resolve_color
 
-        assert _resolve_color("#ff0000") == "#ff0000"
-        assert _resolve_color("#ABC123") == "#ABC123"
+        assert resolve_color("#ff0000") == "#ff0000"
+        assert resolve_color("#ABC123") == "#ABC123"
 
     def test_none_color(self):
         """None color returns None."""
-        from marimo_cad.widget import _resolve_color
+        from marimo_cad.utils import resolve_color
 
-        assert _resolve_color(None) is None
+        assert resolve_color(None) is None

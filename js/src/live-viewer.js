@@ -12,17 +12,7 @@
 import { Viewer } from "three-cad-viewer";
 import { PartManager } from "./part-manager.js";
 import { StateManager } from "./state-manager.js";
-
-/**
- * Tree collapse mode constants (match three-cad-viewer API).
- * @see https://github.com/bernhard-42/three-cad-viewer
- */
-const COLLAPSE_MODE = {
-  EXPAND_ALL: 0,      // Show all nodes expanded
-  ROOT_ONLY: 1,       // Collapse to root level only  
-  COLLAPSE_ALL: 2,    // All nodes collapsed
-  FIRST_LEVEL: 3,     // Expand first level only
-};
+import { COLLAPSE_MODE } from "./constants.js";
 
 /**
  * Extended Viewer with live geometry updates and stateful part management.

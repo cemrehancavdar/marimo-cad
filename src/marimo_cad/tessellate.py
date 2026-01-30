@@ -2,9 +2,13 @@
 
 from typing import Any
 
-# Color constants
-DEFAULT_COLOR = "#e8b024"
-DEFAULT_EDGE_COLOR = "#333333"
+from marimo_cad.constants import (
+    DEFAULT_ANGULAR_TOLERANCE,
+    DEFAULT_DEVIATION,
+    DEFAULT_LOCATION,
+    DEFAULT_PART_COLOR,
+    empty_shapes,
+)
 
 
 def tessellate_single(
@@ -13,8 +17,8 @@ def tessellate_single(
     name: str | None = None,
     color: str | None = None,
     alpha: float | None = None,
-    deviation: float = 0.1,
-    angular_tolerance: float = 0.2,
+    deviation: float = DEFAULT_DEVIATION,
+    angular_tolerance: float = DEFAULT_ANGULAR_TOLERANCE,
 ) -> dict:
     """
     Tessellate a single CAD object and return a part dict.
@@ -64,13 +68,13 @@ def combine_parts(parts: list[dict], name: str = "Assembly") -> dict:
         A shapes_data dict suitable for CADViewer
     """
     if not parts:
-        return _empty_shapes()
+        return empty_shapes()
 
     # Filter out empty parts
     valid_parts = [p for p in parts if p and p.get("shape")]
 
     if not valid_parts:
-        return _empty_shapes()
+        return empty_shapes()
 
     # Calculate combined bounding box
     bb = _combine_bounding_boxes([p.get("bb") for p in valid_parts])
@@ -78,7 +82,7 @@ def combine_parts(parts: list[dict], name: str = "Assembly") -> dict:
     return {
         "version": 3,
         "parts": valid_parts,
-        "loc": [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 1.0]],
+        "loc": DEFAULT_LOCATION.copy(),
         "name": name,
         "id": f"/{name}",
         "bb": bb,
@@ -106,8 +110,8 @@ def to_viewer_format(
     names: list | None = None,
     colors: list | None = None,
     alphas: list | None = None,
-    deviation: float = 0.1,
-    angular_tolerance: float = 0.2,
+    deviation: float = DEFAULT_DEVIATION,
+    angular_tolerance: float = DEFAULT_ANGULAR_TOLERANCE,
 ) -> dict:
     """
     Convert build123d/CadQuery objects to three-cad-viewer JSON format.
@@ -127,7 +131,7 @@ def to_viewer_format(
     from ocp_tessellate.convert import tessellate_group, to_ocpgroup
 
     if not objs:
-        return _empty_shapes()
+        return empty_shapes()
 
     # Set up defaults
     num_objs = len(objs)
@@ -161,18 +165,6 @@ def to_viewer_format(
 
     # Merge shapes data into states (states has refs, shapes has actual data)
     return _merge_shapes_into_states(shapes, states)
-
-
-def _empty_shapes() -> dict:
-    """Return empty shapes structure."""
-    return {
-        "version": 3,
-        "parts": [],
-        "loc": [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 1.0]],
-        "name": "Empty",
-        "id": "/Empty",
-        "bb": {"xmin": 0, "xmax": 0, "ymin": 0, "ymax": 0, "zmin": 0, "zmax": 0},
-    }
 
 
 def _merge_shapes_into_states(shapes: list, states: dict) -> dict:
@@ -232,7 +224,7 @@ def _merge_part(part: dict, shapes: list) -> dict | None:
             "segments_per_edge": _to_list(shape_data.get("segments_per_edge", [])),
         },
         "state": part.get("state", [1, 1]),
-        "color": part.get("color", DEFAULT_COLOR),
+        "color": part.get("color", DEFAULT_PART_COLOR),
         "alpha": part.get("alpha", 1.0),
         "texture": part.get("texture"),
         "loc": _convert_loc(part.get("loc")),
