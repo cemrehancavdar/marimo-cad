@@ -4,6 +4,8 @@
 
 Build interactive 3D CAD models with sliders that update in real-time without losing your camera position.
 
+![Parametric Bookshelf Demo](assets/demo.gif)
+
 ## Why marimo-cad?
 
 marimo already displays build123d objects via `_repr_html_`. So when should you use this?
