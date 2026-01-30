@@ -2,6 +2,8 @@
 
 **Reactive Parametric CAD** for [marimo](https://marimo.io) notebooks.
 
+Built on [build123d](https://github.com/gumyr/build123d) + [three-cad-viewer](https://github.com/bernhard-42/three-cad-viewer).
+
 Build interactive 3D CAD models with sliders that update in real-time without losing your camera position.
 
 ![Parametric Bookshelf Demo](assets/demo.gif)
