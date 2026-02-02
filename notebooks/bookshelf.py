@@ -1,3 +1,10 @@
+# /// script
+# requires-python = "==3.12"
+# dependencies = [
+#     "marimo>=0.19.7",
+#     "marimo-cad", 
+# ]
+# ///
 """Parametric Bookshelf - marimo-cad example."""
 
 import marimo
