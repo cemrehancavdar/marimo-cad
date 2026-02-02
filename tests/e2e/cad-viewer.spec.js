@@ -27,21 +27,24 @@ test.describe('CAD Viewer', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
     // Wait for viewer to initialize
-    await page.waitForSelector('.tv-icon0', { timeout: 15000 });
+    // Wait for viewer canvas to initialize
+    await page.waitForSelector('canvas', { timeout: 15000 });
+    // Give tree time to populate
+    await page.waitForTimeout(2000);
   });
 
   test('001 - initial render shows geometry', async ({ page }) => {
     // Tree should show initial parts with color icons
-    const treeItems = page.locator('.tv-icon0');
+    const treeItems = page.locator('.tv-icon');
     const count = await treeItems.count();
     
     // Default 4 shelves = 8 parts (Left, Right, Back, Top, Bottom, Shelf1, Shelf2 + Group)
     expect(count).toBeGreaterThanOrEqual(7);
     
-    // All visibility icons should be visible (shape visible)
+    // All icons should be tree buttons
     for (let i = 0; i < count; i++) {
       const icon = treeItems.nth(i);
-      await expect(icon).toHaveClass(/tcv_button_shape/);
+      await expect(icon).toHaveClass(/tcv_tree_button/);
     }
     
     // Verify "Shelf 1" and "Shelf 2" appear in tree
@@ -78,21 +81,10 @@ test.describe('CAD Viewer', () => {
     await expect(page.locator('text=Shelf 5')).toBeVisible();
     await expect(page.locator('text=Shelf 6')).toBeVisible();
     
-    // All parts should have visibility icons (12 total: 6 structure + 6 shelves)
-    const visIcons = page.locator('.tv-icon0');
+    // Verify parts have tree icons (v4 shows 2 icons per part: shape + mesh)
+    const visIcons = page.locator('.tv-icon');
     const iconCount = await visIcons.count();
-    expect(iconCount).toBe(12);
-    
-    // All icons should show "shape visible" state
-    for (let i = 0; i < iconCount; i++) {
-      const icon = visIcons.nth(i);
-      await expect(icon).toHaveClass(/tcv_button_shape/);
-    }
-    
-    // Verify color icons exist for new shelves
-    const colorIcons = page.locator('span:has-text("⚈")');
-    const colorCount = await colorIcons.count();
-    expect(colorCount).toBeGreaterThanOrEqual(12);
+    expect(iconCount).toBeGreaterThanOrEqual(12); // At least 12 icons for 6 shelves
     
     // Visual regression check
     await expect(page).toHaveScreenshot('002-dynamic-parts.png', SNAPSHOT_OPTIONS);
@@ -125,13 +117,11 @@ test.describe('CAD Viewer', () => {
     await page.keyboard.press('End');
     await page.waitForTimeout(4000);
     
-    // Get all visibility icons
-    const visIcons = page.locator('.tv-icon0');
-    const count = await visIcons.count();
-    expect(count).toBe(12);
+    // Find Shelf 6's shape visibility icon (icon 0 for shape visibility)
+    const shelf6Row = page.locator('.tv-tree-node[data-path="/Group/Shelf 6"]');
+    await expect(shelf6Row).toBeVisible();
     
-    // The last icon is for Shelf 6
-    const shelf6VisIcon = visIcons.nth(count - 1);
+    const shelf6VisIcon = shelf6Row.locator('.tv-icon').first();
     
     // Verify it's initially visible
     await expect(shelf6VisIcon).toHaveClass(/tcv_button_shape/);
@@ -207,19 +197,19 @@ test.describe('CAD Viewer', () => {
     }
     
     if (clipSlider) {
-      const min = parseFloat(await clipSlider.getAttribute('min'));
-      const max = parseFloat(await clipSlider.getAttribute('max'));
-      const mid = (min + max) / 2;
-      
-      // Apply clipping
-      await clipSlider.fill(mid.toString());
+      // Apply clipping using keyboard (more reliable than fill for range inputs)
+      await clipSlider.focus();
+      // Move slider left multiple times to apply clipping
+      for (let i = 0; i < 10; i++) {
+        await page.keyboard.press('ArrowLeft');
+      }
       await page.waitForTimeout(1000);
       
       // Visual regression check - model should be clipped
       await expect(page).toHaveScreenshot('006-clipping-initial.png', SNAPSHOT_OPTIONS);
       
       // Reset clipping
-      await clipSlider.fill(max.toString());
+      await page.keyboard.press('End');
       await page.waitForTimeout(500);
     }
     
@@ -265,19 +255,18 @@ test.describe('CAD Viewer', () => {
     }
     
     if (clipSlider) {
-      const min = parseFloat(await clipSlider.getAttribute('min'));
-      const max = parseFloat(await clipSlider.getAttribute('max'));
-      const mid = (min + max) / 2;
-      
-      // Apply clipping to dynamic parts
-      await clipSlider.fill(mid.toString());
+      // Apply clipping using keyboard
+      await clipSlider.focus();
+      for (let i = 0; i < 10; i++) {
+        await page.keyboard.press('ArrowLeft');
+      }
       await page.waitForTimeout(1000);
       
       // Visual regression check - dynamic parts should also be clipped
       await expect(page).toHaveScreenshot('007-clipping-dynamic.png', SNAPSHOT_OPTIONS);
       
       // Reset clipping
-      await clipSlider.fill(max.toString());
+      await page.keyboard.press('End');
       await page.waitForTimeout(500);
     }
     

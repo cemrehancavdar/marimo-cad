@@ -14,7 +14,7 @@ import {
   FALLBACK_WIDTH,
   RESIZE_DEBOUNCE_MS,
 } from "./constants.js";
-import "three-cad-viewer/dist/three-cad-viewer.css";
+import "three-cad-viewer/css";
 import "./styles.css";
 
 export function render({ model, el }) {
@@ -97,7 +97,7 @@ export function render({ model, el }) {
     }
 
     // First render or syncParts not available - full render needed
-    if (viewer.nestedGroup) {
+    if (viewer.ready) {
       try { viewer.clear(); } catch (e) {
         console.warn('[marimo-cad] Failed to clear viewer:', e.message);
       }
