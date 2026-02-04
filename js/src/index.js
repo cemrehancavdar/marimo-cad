@@ -61,15 +61,22 @@ export function render({ model, el }) {
     }
   }
   
-  function restoreVisibility() {
-    if (!viewer?.setState) return;
+  function restoreVisibility(newPartNames) {
+    if (!viewer?.setStates) return;
     
     // Build states object for batch update: { path: [shapeVis, edgeVis] }
     const states = {};
-    for (const [name, state] of visibilityStates.entries()) {
+    
+    for (const name of newPartNames) {
       const path = `${parentPath}/${name}`;
-      // Convert boolean to 0/1 for TCV API
-      states[path] = [state[0] ? 1 : 0, state[1] ? 1 : 0];
+      const savedState = visibilityStates.get(name);
+      if (savedState) {
+        // Restore saved visibility state
+        states[path] = [savedState[0] ? 1 : 0, savedState[1] ? 1 : 0];
+      } else {
+        // New part (no saved state) - explicitly set to visible
+        states[path] = [1, 1];
+      }
     }
     
     // Use setStates for batch update (updates both 3D and tree UI)
@@ -98,6 +105,21 @@ export function render({ model, el }) {
         model.save_changes();
       }
     });
+    
+    // Override resize to properly fit new bounds
+    const originalResize = viewer.resize.bind(viewer);
+    viewer.resize = () => {
+      // Update camera for current bounds before resizing
+      const camera = viewer.rendered?.camera;
+      if (camera && viewer.bb_radius) {
+        // Factor 6 gives a bit more margin than default 5
+        camera.camera_distance = 6 * viewer.bb_radius;
+        const cadWidth = viewer.state?.get("cadWidth") || 800;
+        const cadHeight = viewer.state?.get("height") || 600;
+        camera.changeDimensions(viewer.bb_radius, cadWidth, cadHeight);
+      }
+      originalResize();
+    };
     
     initialized = true;
     model.send({ type: "ready" });
@@ -128,12 +150,13 @@ export function render({ model, el }) {
     const newParentPath = shapesData.id || parentPath;
     const newPartNames = new Set(shapesData.parts.map(p => p.name));
 
-    // Phase 1: Remove deleted parts
+    // Phase 1: Remove deleted parts (and forget their visibility state)
     for (const name of currentPartNames) {
       if (!newPartNames.has(name)) {
         try {
           viewer.removePart(`${newParentPath}/${name}`, { skipBounds: true });
         } catch (e) { /* already removed */ }
+        visibilityStates.delete(name);
       }
     }
 
@@ -156,8 +179,8 @@ export function render({ model, el }) {
     parentPath = newParentPath;
     viewer.collapseNodes(COLLAPSE_MODE.EXPAND_ALL);
     
-    // Restore visibility after rebuild
-    restoreVisibility();
+    // Restore visibility after rebuild (pass newPartNames to set new parts visible)
+    restoreVisibility(newPartNames);
     
     viewer.update(viewer.updateMarker);
     
