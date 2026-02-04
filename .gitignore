@@ -55,3 +55,18 @@ blob-report/
 
 # Keep sample files but ignore generated exports
 !notebooks/sample_part.step
+
+# GitHub Pages deployment artifacts (deployed via gh-pages branch)
+assets/
+*.png
+!tests/**/*.png
+favicon.ico
+logo.png
+manifest.json
+site.webmanifest
+.nojekyll
+
+# Agent/AI tool artifacts
+.agent/
+CLAUDE.md
+.python-version
