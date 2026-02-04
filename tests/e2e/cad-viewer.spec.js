@@ -286,4 +286,125 @@ test.describe('CAD Viewer with Rotation', () => {
     await expect(page.locator('text=Ready')).toBeVisible();
   });
 
+  test('008 - visibility persists for permanent parts across slider changes', async ({ page }) => {
+    // Get visibility icons for Left Side, Right Side, Back (indices 1, 2, 3 after Group)
+    const visIcons = page.locator('.tv-icon0');
+    
+    // Hide Left Side, Right Side, Back panels
+    const leftSideIcon = visIcons.nth(1);
+    const rightSideIcon = visIcons.nth(2);
+    const backIcon = visIcons.nth(3);
+    
+    await leftSideIcon.click();
+    await page.waitForTimeout(300);
+    await rightSideIcon.click();
+    await page.waitForTimeout(300);
+    await backIcon.click();
+    await page.waitForTimeout(300);
+    
+    // Verify they are hidden
+    await expect(leftSideIcon).toHaveClass(/tcv_button_shape_no/);
+    await expect(rightSideIcon).toHaveClass(/tcv_button_shape_no/);
+    await expect(backIcon).toHaveClass(/tcv_button_shape_no/);
+    
+    // Change shelves slider (add shelves)
+    const shelvesSlider = page.locator('[role="slider"][aria-valuemin="2"][aria-valuemax="8"]');
+    await shelvesSlider.focus();
+    await page.keyboard.press('ArrowRight');
+    await page.waitForTimeout(2000);
+    
+    // Verify panels are still hidden after slider change
+    const visIconsAfter = page.locator('.tv-icon0');
+    const leftSideIconAfter = visIconsAfter.nth(1);
+    const rightSideIconAfter = visIconsAfter.nth(2);
+    const backIconAfter = visIconsAfter.nth(3);
+    
+    await expect(leftSideIconAfter).toHaveClass(/tcv_button_shape_no/);
+    await expect(rightSideIconAfter).toHaveClass(/tcv_button_shape_no/);
+    await expect(backIconAfter).toHaveClass(/tcv_button_shape_no/);
+    
+    // Decrease shelves
+    await page.keyboard.press('ArrowLeft');
+    await page.waitForTimeout(2000);
+    
+    // Verify panels are still hidden
+    const visIconsFinal = page.locator('.tv-icon0');
+    await expect(visIconsFinal.nth(1)).toHaveClass(/tcv_button_shape_no/);
+    await expect(visIconsFinal.nth(2)).toHaveClass(/tcv_button_shape_no/);
+    await expect(visIconsFinal.nth(3)).toHaveClass(/tcv_button_shape_no/);
+  });
+
+  test('009 - visibility resets for removed and re-added parts', async ({ page }) => {
+    // Start with max shelves (8)
+    const shelvesSlider = page.locator('[role="slider"][aria-valuemin="2"][aria-valuemax="8"]');
+    await shelvesSlider.focus();
+    await page.keyboard.press('End');
+    await page.waitForTimeout(2000);
+    
+    // Verify Shelf 6 exists
+    await expect(page.locator('text=Shelf 6')).toBeVisible();
+    
+    // Get all visibility icons - last one is Shelf 6
+    const visIcons = page.locator('.tv-icon0');
+    const count = await visIcons.count();
+    const shelf6Icon = visIcons.nth(count - 1);
+    
+    // Hide Shelf 6
+    await shelf6Icon.click();
+    await page.waitForTimeout(500);
+    
+    // Verify it's hidden
+    await expect(shelf6Icon).toHaveClass(/tcv_button_shape_no/);
+    
+    // Decrease to 2 shelves (removes Shelf 3-6)
+    await shelvesSlider.focus();
+    await page.keyboard.press('Home');
+    await page.waitForTimeout(2000);
+    
+    // Verify Shelf 6 is gone
+    await expect(page.locator('text=Shelf 6')).not.toBeVisible();
+    
+    // Increase back to max shelves (8)
+    await page.keyboard.press('End');
+    await page.waitForTimeout(2000);
+    
+    // Verify Shelf 6 is back
+    await expect(page.locator('text=Shelf 6')).toBeVisible();
+    
+    // Get icons again - last one should be Shelf 6, now VISIBLE
+    const visIconsAfter = page.locator('.tv-icon0');
+    const countAfter = await visIconsAfter.count();
+    const shelf6IconAfter = visIconsAfter.nth(countAfter - 1);
+    
+    // Should be visible (tcv_button_shape without _no suffix)
+    await expect(shelf6IconAfter).not.toHaveClass(/tcv_button_shape_no/);
+  });
+
+  test('010 - resize object fits view after height change', async ({ page }) => {
+    // Increase height slider to max (object gets taller)
+    // Height slider: min=60, max=200
+    const heightSlider = page.locator('[role="slider"][aria-valuemin="60"][aria-valuemax="200"]');
+    await expect(heightSlider).toBeVisible();
+    await heightSlider.focus();
+    await page.keyboard.press('End');
+    await page.waitForTimeout(2000);
+    
+    // Click "Resize object" button (tooltip wrapper contains the button)
+    const resizeButton = page.locator('.tcv_tooltip:has-text("Resize object") input.tcv_btn').first();
+    if (await resizeButton.count() === 0) {
+      // Fallback: try finding by data-tooltip attribute
+      const resizeWrapper = page.locator('[data-base-tooltip="Resize object"]');
+      await resizeWrapper.click();
+    } else {
+      await resizeButton.click();
+    }
+    await page.waitForTimeout(1000);
+    
+    // Visual check - object should fit in view after resize
+    await expect(page).toHaveScreenshot('010-after-resize.png', SNAPSHOT_OPTIONS);
+    
+    // Verify viewer is still functional
+    await expect(page.locator('text=Ready')).toBeVisible();
+  });
+
 });
