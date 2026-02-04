@@ -14,7 +14,7 @@ import {
   FALLBACK_WIDTH,
   RESIZE_DEBOUNCE_MS,
 } from "./constants.js";
-import "three-cad-viewer/dist/three-cad-viewer.css";
+import "three-cad-viewer/css";
 import "./styles.css";
 
 export function render({ model, el }) {
@@ -89,19 +89,15 @@ export function render({ model, el }) {
       return;
     }
 
-    // If viewer ready, use syncParts (geometry-only update, preserves camera/UI)
-    if (viewer.ready && viewer.syncParts) {
+    // If viewer ready, use syncParts (preserves camera via v4 addPart/removePart)
+    if (viewer.ready) {
       if (viewer.syncParts(shapesData)) {
-        return; // Success - only geometries updated
+        return; // Success - camera preserved
       }
     }
 
-    // First render or syncParts not available - full render needed
-    if (viewer.nestedGroup) {
-      try { viewer.clear(); } catch (e) {
-        console.warn('[marimo-cad] Failed to clear viewer:', e.message);
-      }
-    }
+    // First render - full render needed
+    // NEVER call clear() + render() on updates - this resets camera
     viewer.render(shapesData, DEFAULT_RENDER_OPTIONS, DEFAULT_VIEWER_OPTIONS);
   }
 

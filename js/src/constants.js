@@ -52,14 +52,14 @@ export const DEFAULT_RENDER_OPTIONS = {
 // =============================================================================
 
 /**
- * Tree collapse mode constants
+ * Tree collapse mode constants (v4 CollapseState enum)
  * @see https://github.com/bernhard-42/three-cad-viewer
  */
 export const COLLAPSE_MODE = {
-  EXPAND_ALL: 0,    // Show all nodes expanded
-  ROOT_ONLY: 1,     // Collapse to root level only
-  COLLAPSE_ALL: 2,  // All nodes collapsed
-  FIRST_LEVEL: 3,   // Expand first level only
+  LEAVES: -1,       // Collapse nodes with single leaf
+  COLLAPSE_ALL: 0,  // All nodes collapsed
+  ROOT_ONLY: 1,     // Expand root node only
+  EXPAND_ALL: 2,    // Show all nodes expanded
 };
 
 /** Default viewer options for three-cad-viewer */
@@ -71,7 +71,7 @@ export const DEFAULT_VIEWER_OPTIONS = {
   ortho: true,
   transparent: false,
   blackEdges: true,
-  collapse: COLLAPSE_MODE.ROOT_ONLY,
+  collapse: COLLAPSE_MODE.EXPAND_ALL,
 };
 
 // =============================================================================
