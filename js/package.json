@@ -9,7 +9,7 @@
   },
   "dependencies": {
     "three": "^0.170.0",
-    "three-cad-viewer": "github:bernhard-42/three-cad-viewer#refactor-architecture"
+    "three-cad-viewer": "github:bernhard-42/three-cad-viewer"
   },
   "devDependencies": {
     "@rollup/plugin-terser": "^0.4.4",
