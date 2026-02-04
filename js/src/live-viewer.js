@@ -1,79 +1,42 @@
 /**
- * LiveViewer - Extended three-cad-viewer v4 with live geometry updates
+ * LiveViewer - Extended three-cad-viewer v4.1 with batched geometry updates
  * 
- * Uses v4's addPart/removePart for add/remove, and direct buffer updates
- * for geometry changes (faster than remove+add).
+ * Uses v4.1's batched API for optimal performance:
+ * - skipBounds option defers expensive bounds recalculation
+ * - updateBounds() called once after batch operations
+ * - ensureStencilSize() pre-allocates clipping planes
+ * - updatePart() for in-place geometry updates (falls back to remove+add internally)
  * 
  * See: https://github.com/bernhard-42/three-cad-viewer/issues/36
  */
 
-import * as THREE from "three";
 import { Viewer } from "three-cad-viewer";
 import { COLLAPSE_MODE } from "./constants.js";
 
 /**
- * Update geometry buffers directly (faster than remove+add).
- * @param {THREE.BufferGeometry} geometry - The geometry to update
- * @param {Float32Array|Array} vertices - New vertex positions
- * @param {Float32Array|Array} normals - New normals
- * @param {Uint32Array|Array} triangles - New triangle indices
+ * Check if two loc arrays are equal.
+ * loc format: [[x, y, z], [qx, qy, qz, qw]]
  */
-function updateGeometryBuffers(geometry, vertices, normals, triangles) {
-  if (!geometry) return;
-
-  const positions = vertices instanceof Float32Array ? vertices : new Float32Array(vertices);
-  const normalsArr = normals instanceof Float32Array ? normals : new Float32Array(normals);
-  const indices = triangles instanceof Uint32Array ? triangles : new Uint32Array(triangles);
-
-  // Update position attribute
-  const posAttr = geometry.attributes.position;
-  if (posAttr && posAttr.array.length === positions.length) {
-    posAttr.array.set(positions);
-    posAttr.needsUpdate = true;
-  } else {
-    geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+function locsEqual(loc1, loc2) {
+  if (!loc1 && !loc2) return true;
+  if (!loc1 || !loc2) return false;
+  
+  const [pos1, quat1] = loc1;
+  const [pos2, quat2] = loc2;
+  
+  // Compare positions (allow small epsilon for floating point)
+  const eps = 1e-6;
+  for (let i = 0; i < 3; i++) {
+    if (Math.abs((pos1?.[i] || 0) - (pos2?.[i] || 0)) > eps) return false;
   }
-
-  // Update normal attribute
-  const normAttr = geometry.attributes.normal;
-  if (normAttr && normAttr.array.length === normalsArr.length) {
-    normAttr.array.set(normalsArr);
-    normAttr.needsUpdate = true;
-  } else {
-    geometry.setAttribute("normal", new THREE.BufferAttribute(normalsArr, 3));
+  for (let i = 0; i < 4; i++) {
+    if (Math.abs((quat1?.[i] || 0) - (quat2?.[i] || 0)) > eps) return false;
   }
-
-  // Update index
-  const idxAttr = geometry.index;
-  if (idxAttr && idxAttr.array.length === indices.length) {
-    idxAttr.array.set(indices);
-    idxAttr.needsUpdate = true;
-  } else {
-    geometry.setIndex(new THREE.BufferAttribute(indices, 1));
-  }
-
-  geometry.computeBoundingBox();
-  geometry.computeBoundingSphere();
+  return true;
 }
 
 /**
- * Update edge geometry (LineSegments2).
- * @param {Object} group - ObjectGroup with edges
- * @param {Float32Array|Array} edgeData - New edge positions
- */
-function updateEdgeGeometry(group, edgeData) {
-  // Find edges child - it's a LineSegments2 with setPositions method
-  for (const child of group.children || []) {
-    if (child.geometry?.setPositions) {
-      const positions = edgeData instanceof Float32Array ? edgeData : new Float32Array(edgeData);
-      child.geometry.setPositions(positions);
-      return;
-    }
-  }
-}
-
-/**
- * Extended Viewer with live geometry updates using v4 API + direct buffer updates.
+ * Extended Viewer with batched geometry updates using v4.1 API.
  * 
  * Usage:
  *   const viewer = new LiveViewer(display, options, callback);
@@ -84,142 +47,134 @@ export class LiveViewer extends Viewer {
   constructor(display, options, notifyCallback) {
     super(display, options, notifyCallback);
     
-    // Track current part names
     this._currentPartNames = new Set();
+    this._currentPartLocs = new Map(); // Track loc for each part
     this._parentPath = null;
+    this._expectedBounds = null;
   }
 
   /**
-   * Override render to track initial parts.
+   * Set expected bounds for slider ranges.
+   * Call this after render() to pre-allocate stencil planes.
+   * 
+   * @param {Object} bounds - { xmin, xmax, ymin, ymax, zmin, zmax }
+   */
+  setExpectedBounds(bounds) {
+    this._expectedBounds = bounds;
+    if (typeof this.ensureStencilSize === "function") {
+      this.ensureStencilSize(bounds);
+    }
+  }
+
+  /**
+   * Override render to track initial parts and optionally pre-allocate stencils.
    */
   render(shapesData, renderOptions, viewerOptions) {
     const result = super.render(shapesData, renderOptions, viewerOptions);
     
-    // Track all initial part names
     this._currentPartNames.clear();
+    this._currentPartLocs.clear();
     this._parentPath = shapesData?.id || "/Group";
     
     for (const part of shapesData?.parts || []) {
       this._currentPartNames.add(part.name);
+      this._currentPartLocs.set(part.name, part.loc);
     }
     
-    // Expand tree by default
+    // Pre-allocate stencil if bounds were set
+    if (this._expectedBounds && typeof this.ensureStencilSize === "function") {
+      this.ensureStencilSize(this._expectedBounds);
+    }
+    
     this.collapseNodes(COLLAPSE_MODE.EXPAND_ALL);
     
     return result;
   }
 
   /**
-   * Get an ObjectGroup by part name.
-   * @param {string} name - Part name
-   * @returns {Object|null} ObjectGroup or null
-   */
-  _getGroup(name) {
-    const path = `${this._parentPath}/${name}`;
-    return this.nestedGroup?.groups?.[path] || null;
-  }
-
-  /**
-   * Update a part's geometry in-place (fast).
-   * @param {string} name - Part name
-   * @param {Object} part - Part data with shape
-   * @returns {boolean} true if updated successfully
-   */
-  _updatePartGeometry(name, part) {
-    const group = this._getGroup(name);
-    if (!group || !group.shapeGeometry) return false;
-
-    const shape = part.shape;
-    if (!shape) return false;
-
-    // Update shape geometry
-    updateGeometryBuffers(
-      group.shapeGeometry,
-      shape.vertices || [],
-      shape.normals || [],
-      shape.triangles || []
-    );
-
-    // Update edges if present
-    if (shape.edges?.length > 0) {
-      updateEdgeGeometry(group, shape.edges);
-    }
-
-    // Update transform if present
-    if (part.loc) {
-      const [pos, quat] = part.loc;
-      if (pos) group.position.set(pos[0], pos[1], pos[2]);
-      if (quat) group.quaternion.set(quat[0], quat[1], quat[2], quat[3]);
-    }
-
-    return true;
-  }
-
-  /**
-   * Sync parts with new data.
-   * - Removes parts not in new data
-   * - Updates existing parts with direct buffer writes (fast)
-   * - Adds new parts using v4's addPart
+   * Sync parts with new data using batched operations.
    * 
-   * Preserves camera position and viewer state.
+   * Uses TCV v4.1 API:
+   * - updatePart() for existing parts (handles buffer updates + fallback internally)
+   * - addPart() for new parts
+   * - removePart() for removed parts
+   * - All with skipBounds, then single updateBounds() at end
    * 
    * @param {Object} shapesData - Shape data with parts array
    * @returns {boolean} true if sync succeeded
    */
   syncParts(shapesData) {
-    if (!this.ready) {
-      return false;
-    }
-
-    if (!shapesData?.parts) {
+    if (!this.ready || !shapesData?.parts) {
       return false;
     }
 
     const parentPath = shapesData.id || this._parentPath || "/Group";
     const newPartNames = new Set(shapesData.parts.map(p => p.name));
 
-    // Remove parts not in new data
+    // Phase 1: Remove parts not in new data
     for (const name of this._currentPartNames) {
       if (!newPartNames.has(name)) {
         try {
-          this.removePart(`${parentPath}/${name}`);
+          this.removePart(`${parentPath}/${name}`, { skipBounds: true });
         } catch (e) {
-          console.warn(`[marimo-cad] Failed to remove part ${name}:`, e.message);
+          // Part might already be removed
         }
       }
     }
 
-    // Update existing parts or add new ones
+    // Phase 2: Update existing or add new parts
     for (const part of shapesData.parts) {
+      const path = `${parentPath}/${part.name}`;
+      
       if (this._currentPartNames.has(part.name)) {
-        // Existing part - try direct geometry update (fast)
-        if (!this._updatePartGeometry(part.name, part)) {
-          // Fallback to remove+add if direct update fails
+        // Existing part - check if loc changed (TCV updatePart doesn't handle loc)
+        const oldLoc = this._currentPartLocs.get(part.name);
+        const locChanged = !locsEqual(oldLoc, part.loc);
+        
+        if (locChanged) {
+          // Loc changed - must remove and re-add (updatePart doesn't update transforms)
           try {
-            this.removePart(`${parentPath}/${part.name}`);
-            this.addPart(parentPath, part);
+            this.removePart(path, { skipBounds: true });
+            this.addPart(parentPath, part, { skipBounds: true });
           } catch (e) {
-            console.warn(`[marimo-cad] Failed to update part ${part.name}:`, e.message);
+            console.warn(`[marimo-cad] Failed to relocate part ${part.name}:`, e.message);
+          }
+        } else {
+          // Loc same - try updatePart for geometry changes
+          try {
+            this.updatePart(path, part, { skipBounds: true });
+          } catch (e) {
+            // updatePart failed - fall back to remove + add
+            try {
+              this.removePart(path, { skipBounds: true });
+              this.addPart(parentPath, part, { skipBounds: true });
+            } catch (e2) {
+              console.warn(`[marimo-cad] Failed to update part ${part.name}:`, e2.message);
+            }
           }
         }
       } else {
-        // New part - add using v4 API
+        // New part - add
         try {
-          this.addPart(parentPath, part);
+          this.addPart(parentPath, part, { skipBounds: true });
         } catch (e) {
           console.warn(`[marimo-cad] Failed to add part ${part.name}:`, e.message);
         }
       }
     }
 
+    // Phase 3: Finalize batch - recalculate bounds once
+    this.updateBounds();
+
     // Update tracking
     this._currentPartNames = newPartNames;
+    this._currentPartLocs.clear();
+    for (const part of shapesData.parts) {
+      this._currentPartLocs.set(part.name, part.loc);
+    }
     this._parentPath = parentPath;
 
-    // Expand tree after changes
     this.collapseNodes(COLLAPSE_MODE.EXPAND_ALL);
-
-    // Trigger render update
     this.update(this.updateMarker);
 
     return true;
