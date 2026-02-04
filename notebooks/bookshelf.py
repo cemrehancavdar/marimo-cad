@@ -2,13 +2,8 @@
 
 import marimo
 
-__generated_with = "0.19.6"
+__generated_with = "0.19.7"
 app = marimo.App(width="medium")
-
-
-@app.cell
-def _():
-    return
 
 
 @app.cell
@@ -17,7 +12,6 @@ def _():
     from build123d import Box, Pos
 
     import marimo_cad as cad
-
     return Box, Pos, cad, mo
 
 
