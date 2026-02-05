@@ -1,27 +1,32 @@
 /**
  * marimo-cad widget - anywidget frontend for 3D CAD viewing
+ * 
+ * Uses three-cad-viewer v4.1 batched API for reactive updates:
+ * - skipBounds defers bounds recalculation
+ * - updateBounds() called once after batch
+ * - Camera preserved across updates
+ * 
+ * See: https://github.com/bernhard-42/three-cad-viewer/issues/36
  */
 
-import { Display } from "three-cad-viewer";
-import { LiveViewer } from "./live-viewer.js";
+import { Display, Viewer } from "three-cad-viewer";
 import {
   DEFAULT_RENDER_OPTIONS,
   DEFAULT_VIEWER_OPTIONS,
   DEFAULT_DISPLAY_OPTIONS,
+  COLLAPSE_MODE,
   TREE_WIDTH,
   INTERNAL_PADDING,
   MIN_CAD_WIDTH,
   FALLBACK_WIDTH,
   RESIZE_DEBOUNCE_MS,
 } from "./constants.js";
-import "three-cad-viewer/dist/three-cad-viewer.css";
+import "three-cad-viewer/css";
 import "./styles.css";
 
 export function render({ model, el }) {
   const widthRaw = model.get("width") || "100%";
   const height = model.get("height") || 600;
-  
-  // Width can be CSS string ("100%", "800px") or number
   const widthCSS = typeof widthRaw === "number" ? `${widthRaw}px` : widthRaw;
   
   const container = document.createElement("div");
@@ -34,24 +39,26 @@ export function render({ model, el }) {
   let viewer = null;
   let resizeTimeout = null;
   let initialized = false;
-
+  
+  // Part tracking for batched updates
+  let currentPartNames = new Set();
+  let parentPath = "/Group";
+  
   function initializeViewer() {
     if (initialized) return;
     
-    // Measure actual container width after it's in the DOM
     const measuredWidth = container.getBoundingClientRect().width;
     const totalWidth = measuredWidth > 0 ? Math.floor(measuredWidth) : FALLBACK_WIDTH;
     const cadWidth = Math.max(totalWidth - TREE_WIDTH - INTERNAL_PADDING, MIN_CAD_WIDTH);
 
-    const displayOptions = {
+    display = new Display(container, {
       ...DEFAULT_DISPLAY_OPTIONS,
-      cadWidth: cadWidth,
-      height: height,
+      cadWidth,
+      height,
       treeWidth: TREE_WIDTH,
-    };
-
-    display = new Display(container, displayOptions);
-    viewer = new LiveViewer(display, DEFAULT_VIEWER_OPTIONS, (change) => {
+    });
+    
+    viewer = new Viewer(display, DEFAULT_VIEWER_OPTIONS, (change) => {
       if (change.type === "select") {
         model.set("selected", change.data);
         model.save_changes();
@@ -59,15 +66,9 @@ export function render({ model, el }) {
     });
     
     initialized = true;
-    
-    // Signal to Python that JS is ready to receive data
     model.send({ type: "ready" });
-    
-    // Try to render any data that's already available
     renderShapes();
     
-    // Set the viewer's internal cadWidth to match display after first render frame
-    // Using requestAnimationFrame ensures three.js renderer is initialized
     requestAnimationFrame(() => {
       if (viewer.ready) {
         try {
@@ -79,84 +80,102 @@ export function render({ model, el }) {
     });
   }
 
+  /**
+   * Sync parts using batched remove+add.
+   * TCV v4.1+ preserves visibility and camera distance internally.
+   * Returns true if sync succeeded, false if full render needed.
+   */
+  function syncParts(shapesData) {
+    if (!viewer.ready || !shapesData?.parts) return false;
+
+    const newParentPath = shapesData.id || parentPath;
+    const newPartNames = new Set(shapesData.parts.map(p => p.name));
+
+    // Phase 1: Remove deleted parts
+    for (const name of currentPartNames) {
+      if (!newPartNames.has(name)) {
+        try {
+          viewer.removePart(`${newParentPath}/${name}`, { skipBounds: true });
+        } catch (e) { /* already removed */ }
+      }
+    }
+
+    // Phase 2: Update (remove+add) or add parts
+    for (const part of shapesData.parts) {
+      const path = `${newParentPath}/${part.name}`;
+      try {
+        if (currentPartNames.has(part.name)) {
+          viewer.removePart(path, { skipBounds: true });
+        }
+        viewer.addPart(newParentPath, part, { skipBounds: true });
+      } catch (e) {
+        console.warn(`[marimo-cad] Failed to sync part ${part.name}:`, e.message);
+      }
+    }
+
+    // Phase 3: Finalize (TCV preserves visibility internally)
+    viewer.updateBounds();
+    currentPartNames = newPartNames;
+    parentPath = newParentPath;
+    viewer.collapseNodes(COLLAPSE_MODE.EXPAND_ALL);
+    
+    return true;
+  }
+
   function renderShapes() {
     if (!viewer) return;
     
     const shapesData = model.get("shapes_data");
-    
-    // Skip empty data
-    if (!shapesData || !shapesData.parts || shapesData.parts.length === 0) {
-      return;
-    }
+    if (!shapesData?.parts?.length) return;
 
-    // If viewer ready, use syncParts (geometry-only update, preserves camera/UI)
-    if (viewer.ready && viewer.syncParts) {
-      if (viewer.syncParts(shapesData)) {
-        return; // Success - only geometries updated
-      }
-    }
+    // Try sync first (preserves camera)
+    if (viewer.ready && syncParts(shapesData)) return;
 
-    // First render or syncParts not available - full render needed
-    if (viewer.nestedGroup) {
-      try { viewer.clear(); } catch (e) {
-        console.warn('[marimo-cad] Failed to clear viewer:', e.message);
-      }
-    }
+    // Initial render
     viewer.render(shapesData, DEFAULT_RENDER_OPTIONS, DEFAULT_VIEWER_OPTIONS);
+    currentPartNames.clear();
+    parentPath = shapesData.id || "/Group";
+    for (const part of shapesData.parts) {
+      currentPartNames.add(part.name);
+    }
+    viewer.collapseNodes(COLLAPSE_MODE.EXPAND_ALL);
   }
 
   model.on("change:shapes_data", renderShapes);
 
-  // Helper to properly resize the display and viewer
   function resizeDisplay(containerWidth) {
-    if (!display || !viewer || !viewer.ready) return;
-    
+    if (!display || !viewer?.ready) return;
     const newCadWidth = Math.max(Math.floor(containerWidth) - TREE_WIDTH - INTERNAL_PADDING, MIN_CAD_WIDTH);
     try {
-      display.setSizes({ 
-        cadWidth: newCadWidth, 
-        height: height,
-        treeWidth: TREE_WIDTH,
-      });
+      display.setSizes({ cadWidth: newCadWidth, height, treeWidth: TREE_WIDTH });
       viewer.resizeCadView(newCadWidth, TREE_WIDTH, height, false);
     } catch (e) {
       console.warn('[marimo-cad] Resize failed:', e.message);
     }
   }
 
-  // Handle container resizes (for responsive width like "100%")
   const resizeObserver = new ResizeObserver((entries) => {
     const newWidth = entries[0].contentRect.width;
     if (newWidth > 0) {
       if (!initialized) {
-        // First resize - initialize with correct width
         initializeViewer();
       } else {
-        // Subsequent resizes - debounce
         if (resizeTimeout) clearTimeout(resizeTimeout);
-        resizeTimeout = setTimeout(() => {
-          resizeDisplay(newWidth);
-        }, RESIZE_DEBOUNCE_MS);
+        resizeTimeout = setTimeout(() => resizeDisplay(newWidth), RESIZE_DEBOUNCE_MS);
       }
     }
   });
   resizeObserver.observe(container);
 
-  // Fallback: initialize after animation frame if ResizeObserver hasn't fired
-  // This handles edge cases where container has fixed width (no resize event)
   requestAnimationFrame(() => {
-    if (!initialized) {
-      initializeViewer();
-    }
+    if (!initialized) initializeViewer();
   });
 
   return () => {
     resizeObserver.disconnect();
     if (resizeTimeout) clearTimeout(resizeTimeout);
     if (viewer) {
-      try { viewer.dispose(); } catch(e) {
-        console.warn('[marimo-cad] Dispose failed:', e.message);
-      }
+      try { viewer.dispose(); } catch(e) { /* ignore */ }
     }
     container.innerHTML = "";
   };
