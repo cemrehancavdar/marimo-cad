@@ -44,47 +44,6 @@ export function render({ model, el }) {
   let currentPartNames = new Set();
   let parentPath = "/Group";
   
-  // Visibility state preservation: name -> [shapeVisible, edgesVisible]
-  const visibilityStates = new Map();
-  
-  function saveVisibility() {
-    const groups = viewer?.nestedGroup?.groups;
-    if (!groups) return;
-    
-    for (const [path, group] of Object.entries(groups)) {
-      if (!group?.isObjectGroup) continue; // Only save ObjectGroup visibility
-      const name = path.split('/').pop();
-      // TCV ObjectGroup stores visibility on material.visible, not mesh.visible
-      const shapeVis = group.front?.material?.visible ?? true;
-      const edgeVis = group.edgeMaterial?.visible ?? true;
-      visibilityStates.set(name, [shapeVis, edgeVis]);
-    }
-  }
-  
-  function restoreVisibility(newPartNames) {
-    if (!viewer?.setStates) return;
-    
-    // Build states object for batch update: { path: [shapeVis, edgeVis] }
-    const states = {};
-    
-    for (const name of newPartNames) {
-      const path = `${parentPath}/${name}`;
-      const savedState = visibilityStates.get(name);
-      if (savedState) {
-        // Restore saved visibility state
-        states[path] = [savedState[0] ? 1 : 0, savedState[1] ? 1 : 0];
-      } else {
-        // New part (no saved state) - explicitly set to visible
-        states[path] = [1, 1];
-      }
-    }
-    
-    // Use setStates for batch update (updates both 3D and tree UI)
-    if (Object.keys(states).length > 0) {
-      viewer.setStates(states);
-    }
-  }
-
   function initializeViewer() {
     if (initialized) return;
     
@@ -106,21 +65,6 @@ export function render({ model, el }) {
       }
     });
     
-    // Override resize to properly fit new bounds
-    const originalResize = viewer.resize.bind(viewer);
-    viewer.resize = () => {
-      // Update camera for current bounds before resizing
-      const camera = viewer.rendered?.camera;
-      if (camera && viewer.bb_radius) {
-        // Factor 6 gives a bit more margin than default 5
-        camera.camera_distance = 6 * viewer.bb_radius;
-        const cadWidth = viewer.state?.get("cadWidth") || 800;
-        const cadHeight = viewer.state?.get("height") || 600;
-        camera.changeDimensions(viewer.bb_radius, cadWidth, cadHeight);
-      }
-      originalResize();
-    };
-    
     initialized = true;
     model.send({ type: "ready" });
     renderShapes();
@@ -138,25 +82,21 @@ export function render({ model, el }) {
 
   /**
    * Sync parts using batched remove+add.
-   * Preserves visibility state across updates.
+   * TCV v4.1+ preserves visibility and camera distance internally.
    * Returns true if sync succeeded, false if full render needed.
    */
   function syncParts(shapesData) {
     if (!viewer.ready || !shapesData?.parts) return false;
 
-    // Save visibility before modifying
-    saveVisibility();
-
     const newParentPath = shapesData.id || parentPath;
     const newPartNames = new Set(shapesData.parts.map(p => p.name));
 
-    // Phase 1: Remove deleted parts (and forget their visibility state)
+    // Phase 1: Remove deleted parts
     for (const name of currentPartNames) {
       if (!newPartNames.has(name)) {
         try {
           viewer.removePart(`${newParentPath}/${name}`, { skipBounds: true });
         } catch (e) { /* already removed */ }
-        visibilityStates.delete(name);
       }
     }
 
@@ -173,16 +113,11 @@ export function render({ model, el }) {
       }
     }
 
-    // Phase 3: Finalize
+    // Phase 3: Finalize (TCV preserves visibility internally)
     viewer.updateBounds();
     currentPartNames = newPartNames;
     parentPath = newParentPath;
     viewer.collapseNodes(COLLAPSE_MODE.EXPAND_ALL);
-    
-    // Restore visibility after rebuild (pass newPartNames to set new parts visible)
-    restoreVisibility(newPartNames);
-    
-    viewer.update(viewer.updateMarker);
     
     return true;
   }
