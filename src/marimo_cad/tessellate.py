@@ -177,7 +177,8 @@ def _merge_shapes_into_states(shapes: list, states: dict) -> dict:
     Nested build123d assemblies (Compound with children) produce nested
     groups - dicts with their own "parts" list - rather than leaf parts
     with a ref. Those are flattened here, since the frontend tracks a
-    flat part list.
+    flat part list. Standalone edges and vertices carry their mesh inline
+    with no ref at all, and are passed through as-is.
     """
     result = {
         "version": states.get("version", 3),
@@ -231,6 +232,10 @@ def _merge_part(part: dict, shapes: list) -> dict | None:
     if isinstance(part.get("parts"), list):
         return None
 
+    part_type = part.get("type", "shapes")
+    if part_type in ("edges", "vertices"):
+        return _merge_edge_or_vertex_part(part)
+
     # Get the shape ref
     shape_info = part.get("shape", {})
     ref = shape_info.get("ref") if isinstance(shape_info, dict) else None
@@ -270,9 +275,56 @@ def _merge_part(part: dict, shapes: list) -> dict | None:
     }
 
 
+def _merge_edge_or_vertex_part(part: dict) -> dict | None:
+    """Pass through standalone edge/vertex parts (inline mesh, no ref)."""
+    part_type = part.get("type")
+    raw = part.get("shape", {})
+    if not isinstance(raw, dict):
+        return None
+    shape = {
+        "vertices": [],
+        "triangles": [],
+        "normals": [],
+        "edges": _to_list(raw.get("edges", [])),
+        "obj_vertices": _to_list(raw.get("obj_vertices", [])),
+        "face_types": [],
+        "edge_types": _to_list(raw.get("edge_types", [])),
+        "triangles_per_face": [],
+        "segments_per_edge": _to_list(raw.get("segments_per_edge", [])),
+    }
+    if part_type == "vertices" and not shape["obj_vertices"]:
+        return None
+    if part_type == "edges" and not shape["edges"] and not shape["obj_vertices"]:
+        return None
+    merged = {
+        "id": part.get("id", "/Model/Part"),
+        "type": part_type,
+        "name": part.get("name", "Part"),
+        "shape": shape,
+        "state": part.get("state", [3, 1]),
+        "color": part.get("color", DEFAULT_PART_COLOR),
+        "loc": _convert_loc(part.get("loc")),
+        "bb": _convert_bb(part.get("bb")),
+    }
+    if part_type == "edges":
+        merged["width"] = part.get("width", 2)
+    else:
+        merged["size"] = part.get("size", 6)
+    if "alpha" in part:
+        merged["alpha"] = part["alpha"]
+    return merged
+
+
 def _convert_bb(bb: dict | None) -> dict | None:
-    """Convert bounding box, handling numpy types."""
+    """Convert bounding box, handling numpy types and BoundingBox objects."""
     if bb is None:
+        return None
+    if hasattr(bb, "to_dict"):
+        try:
+            bb = bb.to_dict()
+        except Exception:
+            return None
+    if not isinstance(bb, dict):
         return None
     return {
         "xmin": float(bb.get("xmin", 0)),
