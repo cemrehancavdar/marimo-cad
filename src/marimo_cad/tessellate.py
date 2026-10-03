@@ -173,6 +173,11 @@ def _merge_shapes_into_states(shapes: list, states: dict) -> dict:
 
     The states dict has parts with shape: {ref: N} that reference
     the shapes list. We need to replace refs with actual mesh data.
+
+    Nested build123d assemblies (Compound with children) produce nested
+    groups - dicts with their own "parts" list - rather than leaf parts
+    with a ref. Those are flattened here, since the frontend tracks a
+    flat part list.
     """
     result = {
         "version": states.get("version", 3),
@@ -183,28 +188,59 @@ def _merge_shapes_into_states(shapes: list, states: dict) -> dict:
         "bb": _convert_bb(states.get("bb", {})),
     }
 
-    for part in states.get("parts", []):
-        merged_part = _merge_part(part, shapes)
-        if merged_part:
-            result["parts"].append(merged_part)
+    _collect_parts(states.get("parts", []), shapes, result["parts"], set())
 
     return result
 
 
+def _collect_parts(items: Any, shapes: list, out: list, seen: set) -> None:
+    """Recursively flatten (possibly nested) state parts into out."""
+    for item in items or []:
+        if not isinstance(item, dict):
+            continue
+        nested = item.get("parts")
+        if isinstance(nested, list):
+            _collect_parts(nested, shapes, out, seen)
+            continue
+        merged_part = _merge_part(item, shapes)
+        if merged_part:
+            out.append(_uniquify(merged_part, seen))
+
+
+def _uniquify(part: dict, seen: set) -> dict:
+    """Ensure flattened part names stay unique for the flat tree view."""
+    name = part.get("name", "Part")
+    if name not in seen:
+        seen.add(name)
+        return part
+    counter = 2
+    while f"{name} ({counter})" in seen:
+        counter += 1
+    part["name"] = f"{name} ({counter})"
+    part["id"] = f"{part.get('id', '')} ({counter})"
+    seen.add(part["name"])
+    return part
+
+
 def _merge_part(part: dict, shapes: list) -> dict | None:
     """Merge a single part with its shape data from shapes list."""
-    if not part:
+    if not part or not isinstance(part, dict):
+        return None
+
+    # Nested group, not a leaf part - handled by _collect_parts
+    if isinstance(part.get("parts"), list):
         return None
 
     # Get the shape ref
     shape_info = part.get("shape", {})
-    ref = shape_info.get("ref")
+    ref = shape_info.get("ref") if isinstance(shape_info, dict) else None
 
-    # Get the actual shape data from shapes list
-    if ref is not None and ref < len(shapes):
-        shape_data = shapes[ref]
-    else:
-        shape_data = {}
+    # Get the actual shape data from shapes list. A missing or out-of-range ref
+    # means there is no geometry to draw, so drop the part instead of emitting
+    # an empty mesh, which the viewer renders as a blank canvas.
+    if ref is None or not 0 <= ref < len(shapes):
+        return None
+    shape_data = shapes[ref]
 
     # Convert numpy arrays to lists
     return {

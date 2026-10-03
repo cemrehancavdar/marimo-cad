@@ -1,7 +1,7 @@
 """Tests for tessellation module."""
 
 import pytest
-from build123d import Box, Cylinder
+from build123d import Box, Compound, Cylinder
 
 
 class TestToViewerFormat:
@@ -190,3 +190,106 @@ class TestCombineParts:
         assert bb["xmax"] == pytest.approx(10, abs=0.5)  # 20/2
         assert bb["ymax"] == pytest.approx(10, abs=0.5)
         assert bb["zmax"] == pytest.approx(10, abs=0.5)
+
+
+class TestNestedCompound:
+    """Tests for nested Compound(children=[...]) assemblies (issue #6)."""
+
+    def test_single_level_children(self):
+        """Single-level Compound with children renders."""
+        from marimo_cad.tessellate import to_viewer_format
+
+        obj = Compound(label="Top", children=[Box(10, 10, 10)])
+        result = to_viewer_format(obj)
+
+        assert len(result["parts"]) == 1
+        assert len(result["parts"][0]["shape"]["vertices"]) > 0
+
+    def test_nested_children_compound(self):
+        """Nested Compound built with children= renders (was blank)."""
+        from marimo_cad.tessellate import to_viewer_format
+
+        obj = Compound(
+            label="Top",
+            children=[Compound(label="Inner", children=[Box(10, 10, 10)])],
+        )
+        result = to_viewer_format(obj)
+
+        assert len(result["parts"]) == 1
+        part = result["parts"][0]
+        assert len(part["shape"]["vertices"]) > 0
+        assert len(part["shape"]["triangles"]) > 0
+        bb = result["bb"]
+        assert bb["xmax"] - bb["xmin"] == pytest.approx(10, abs=0.5)
+
+    def test_deeply_nested_unique_names(self):
+        """Two identical leaf names flatten without collision."""
+        from marimo_cad.tessellate import to_viewer_format
+
+        obj = Compound(
+            label="Top",
+            children=[
+                Compound(label="A", children=[Box(10, 10, 10)]),
+                Compound(label="B", children=[Box(5, 5, 5)]),
+            ],
+        )
+        result = to_viewer_format(obj)
+
+        assert len(result["parts"]) == 2
+        names = [p["name"] for p in result["parts"]]
+        assert len(set(names)) == 2
+        for part in result["parts"]:
+            assert len(part["shape"]["vertices"]) > 0
+
+
+class TestMergeHelpers:
+    """Unit tests for the state-merge helpers (no CAD objects needed)."""
+
+    def test_flatten_nested_groups(self):
+        """Nested groups flatten to leaf parts."""
+        from marimo_cad.tessellate import _merge_shapes_into_states
+
+        shapes = [{"vertices": [1.0], "triangles": [0]}]
+        states = {
+            "parts": [
+                {
+                    "name": "Inner",
+                    "id": "/Top/Inner",
+                    "parts": [
+                        {
+                            "id": "/Top/Inner/Solid",
+                            "type": "shapes",
+                            "name": "Solid",
+                            "shape": {"ref": 0},
+                        }
+                    ],
+                }
+            ],
+            "name": "Top",
+            "id": "/Top",
+        }
+        result = _merge_shapes_into_states(shapes, states)
+
+        assert len(result["parts"]) == 1
+        assert result["parts"][0]["name"] == "Solid"
+        assert result["parts"][0]["shape"]["vertices"] == [1.0]
+
+    def test_invalid_ref_dropped(self):
+        """Parts with missing refs are dropped instead of blank."""
+        from marimo_cad.tessellate import _merge_shapes_into_states
+
+        states = {
+            "parts": [
+                {
+                    "id": "/Top/Bad",
+                    "type": "shapes",
+                    "name": "Bad",
+                    "shape": {"ref": 5},
+                }
+            ],
+            "name": "Top",
+            "id": "/Top",
+        }
+        result = _merge_shapes_into_states([], states)
+
+        assert result["parts"] == []
