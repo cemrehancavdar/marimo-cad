@@ -1,7 +1,7 @@
 """Tests for tessellation module."""
 
 import pytest
-from build123d import Box, Compound, Cylinder
+from build123d import Box, Circle, Compound, Cylinder, Line, Vector, Vertex
 
 
 class TestToViewerFormat:
@@ -289,6 +289,95 @@ class TestMergeHelpers:
             ],
             "name": "Top",
             "id": "/Top",
+        }
+        result = _merge_shapes_into_states([], states)
+
+        assert result["parts"] == []
+
+
+class TestEdgeVertex:
+    """Tests for standalone edges and vertices (issue #5)."""
+
+    def test_line_renders(self):
+        """A standalone Line produces an edges part with data."""
+        from marimo_cad.tessellate import to_viewer_format
+
+        line = Line(Vector(0, 0, 0), Vector(6, 6, 0))
+        result = to_viewer_format(line, names=["line"])
+
+        assert len(result["parts"]) == 1
+        part = result["parts"][0]
+        assert part["type"] == "edges"
+        assert len(part["shape"]["edges"]) > 0
+
+    def test_vertex_renders(self):
+        """A standalone Vertex produces a vertices part with data."""
+        from marimo_cad.tessellate import to_viewer_format
+
+        result = to_viewer_format(Vertex(0, 6, 0), names=["vertex"])
+
+        assert len(result["parts"]) == 1
+        part = result["parts"][0]
+        assert part["type"] == "vertices"
+        assert len(part["shape"]["obj_vertices"]) == 3
+
+    def test_mixed_shapes_edges_vertices(self):
+        """Circle + Line + Vertex all render together."""
+        from marimo_cad.tessellate import to_viewer_format
+
+        circle = Circle(radius=3)
+        line = Line(Vector(0, 0, 0), Vector(6, 6, 0))
+        vertex = Vertex(0, 6, 0)
+        result = to_viewer_format(circle, line, vertex, names=["circle", "line", "vertex"])
+
+        assert len(result["parts"]) == 3
+        by_name = {p["name"]: p for p in result["parts"]}
+        assert len(by_name["circle"]["shape"]["triangles"]) > 0
+        assert len(by_name["line"]["shape"]["edges"]) > 0
+        assert len(by_name["vertex"]["shape"]["obj_vertices"]) == 3
+
+
+class TestEdgeVertexMerge:
+    """Unit tests for edge/vertex merging (no CAD objects needed)."""
+
+    def test_edge_passthrough(self):
+        """Inline edge payloads pass through without a ref lookup."""
+        from marimo_cad.tessellate import _merge_shapes_into_states
+
+        states = {
+            "parts": [
+                {
+                    "id": "/Group/line",
+                    "type": "edges",
+                    "name": "line",
+                    "shape": {"edges": [0.0, 6.0], "obj_vertices": [0.0]},
+                    "width": 2,
+                }
+            ],
+            "name": "Group",
+            "id": "/Group",
+        }
+        result = _merge_shapes_into_states([], states)
+
+        assert len(result["parts"]) == 1
+        assert result["parts"][0]["type"] == "edges"
+        assert result["parts"][0]["shape"]["edges"] == [0.0, 6.0]
+
+    def test_empty_edge_dropped(self):
+        """An edge part with no geometry drops instead of blanking."""
+        from marimo_cad.tessellate import _merge_shapes_into_states
+
+        states = {
+            "parts": [
+                {
+                    "id": "/Group/degenerate",
+                    "type": "edges",
+                    "name": "degenerate",
+                    "shape": {},
+                }
+            ],
+            "name": "Group",
+            "id": "/Group",
         }
         result = _merge_shapes_into_states([], states)
 
