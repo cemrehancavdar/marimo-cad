@@ -13,7 +13,7 @@ Build interactive 3D CAD models with sliders that update in real-time without lo
 | Use Case | Native build123d | marimo-cad |
 |----------|------------------|------------|
 | Quick visualization | Just return the object | Overkill |
-| **Parametric design with sliders** | Camera resets on every change | Camera preserved |
+| **Parametric design with sliders** | Camera preserved (since ocp_vscode 3.1.0) | Camera preserved |
 | Named multi-part assemblies | No | Yes, with tree view |
 | Export (STL/STEP/GLTF) | Manual | Built-in |
 
